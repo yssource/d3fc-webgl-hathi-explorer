@@ -1,8 +1,12 @@
+import * as d3 from 'd3';
+import * as fc from 'd3fc';
+import { annotation } from 'd3-svg-annotation';
+
 // Wraps the most awesome d3-annotation component (https://d3-annotation.susielu.com/)
 // so that it can be rendered as a series
 export const seriesSvgAnnotation = () => {
   // the underlying component that we are wrapping
-  const d3Annotation = d3.annotation();
+  const d3Annotation = annotation();
 
   let xScale = d3.scaleLinear();
   let yScale = d3.scaleLinear();

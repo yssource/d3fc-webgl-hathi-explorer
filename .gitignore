@@ -1,1 +1,3 @@
 data-large.tsv
+node_modules
+.cache
