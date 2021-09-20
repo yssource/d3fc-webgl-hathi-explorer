@@ -9,14 +9,20 @@ import funkyAttribute from './streamingAttribute';
 import indexedFillColor from './indexedFillColor';
 // @ts-ignore
 import arrowFile from './data.arrow';
+import thing from './thing';
 
 const VALUE_BUFFER_SIZE = 4e6; // 1M values * 4 byte value width
 const columnValues = columnName => batch => batch.select(columnName).getChildAt(0).values;
 
 const data = {
+  pointers: [],
+  annotations: [],
   length: 0,
-  batches: []
+  batches: [],
+  table: null
 };
+
+window.data = data;
 
 // compute the fill color for each datapoint
 const languageAttribute = funkyAttribute()
@@ -53,9 +59,32 @@ const yearFill = indexedFillColor()
 
 let fillColor = yearFill;
 
+// LSB - assume little endian
+const indexAttribute = funkyAttribute()
+  .maxByteLength(VALUE_BUFFER_SIZE)
+  .type(fc.webglTypes.UNSIGNED_SHORT)
+  .size(2);
+
+const seenIndices = new Set();
+
+const aThing = thing(1024);
 const pointSeries = funkyPointSeries(VALUE_BUFFER_SIZE);
 // typescript...
 pointSeries.decorate((programBuilder, data) => {
+  indexAttribute.data(data.batches.map(columnValues('ix')));
+  // data.pointers[0] = {x: -17.02014846235419, y: 7.688229056203607};
+  data.annotations = [];
+  if (data.pointers[0] != null) {
+    const { index, distance } = aThing(programBuilder, data, data.pointers[0], indexAttribute);
+    if (distance < 2) {
+      seenIndices.add(index);
+      // console.log(data.pointers[0], index, data.table.get(index).getValue(6), data.table.get(index).getValue(7))
+      // console.log(seenIndices.size);
+      data.annotations = [
+        createAnnotationData(data.table.get(index))
+      ];
+    }
+  }
   languageAttribute.data(data.batches.map(columnValues('language')));
   yearAttribute.data(data.batches.map(columnValues('date')));
   fillColor(programBuilder);
@@ -72,8 +101,6 @@ for (const el of document.querySelectorAll('.controls a')) {
     redraw();
   });
 }
-
-const quadtree = d3.quadtree();
 
 const createAnnotationData = row => ({
   note: {
@@ -95,17 +122,16 @@ const run = async () => {
   // must access the underlying value arrays otherwise we'll end up with shallow copies which trips the dirty checks in the attribute
   pointSeries.crossValues(d => d.batches.map(columnValues('x')));
   pointSeries.mainValues(d => d.batches.map(columnValues('y')));
-
-  quadtree.x(d => (<any>d).getValue((<any>d).getIndex('x')))
-  quadtree.y(d => (<any>d).getValue((<any>d).getIndex('y')))
-
   for await (const recordBatch of reader) {
     data.batches.push(recordBatch);
+    // data.length = 512;
     data.length += recordBatch.length;
-    // quadtree.addAll(<any>Array.from(recordBatch));
     document.querySelector('#loading>span').innerHTML = new Intl.NumberFormat().format(data.length) + ' points loaded';
     redraw();
+    break;
   }
+
+  data.table = new Arrow.Table(data.batches[0].schema, data.batches);
 };
 
 run();
@@ -113,25 +139,11 @@ run();
 const xScale = d3.scaleLinear().domain([-50, 50]);
 const yScale = d3.scaleLinear().domain([-50, 50]);
 
-const annotations = [];
-
-const pointer = fc.pointer().on('point', ([coord]) => {
-  annotations.pop();
-
-  if (!coord) {
-    return;
-  }
-
-  // find the closes datapoint to the pointer
-  const x = xScale.invert(coord.x);
-  const y = yScale.invert(coord.y);
-  const radius = Math.abs(xScale.invert(coord.x) - xScale.invert(coord.x - 20));
-  const closestDatum = quadtree.find(x, y, radius);
-
-  // if the closest point is within 20 pixels, show the annotation
-  if (closestDatum) {
-    annotations[0] = createAnnotationData(closestDatum);
-  }
+const pointer = fc.pointer().on('point', (pointers) => {
+  data.pointers = pointers.map(({ x, y }) => ({
+    x: xScale.invert(x),
+    y: yScale.invert(y)
+  }));
 
   redraw();
 });
@@ -148,7 +160,6 @@ const chart = fc
     fc
       .seriesWebglMulti()
       .series([pointSeries])
-      .mapping(d => d.data)
   )
   .svgPlotArea(
     // only render the annotations series on the SVG layer
@@ -166,5 +177,5 @@ const chart = fc
 // render the chart with the required data
 // Enqueues a redraw to occur on the next animation frame
 function redraw() {
-  d3.select('#chart').datum({ annotations, data }).call(chart);
+  d3.select('#chart').datum(data).call(chart);
 };

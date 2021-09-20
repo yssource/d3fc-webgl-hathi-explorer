@@ -71,8 +71,7 @@ export default () => {
         return streamingAttribute;
     };
 
-    // confirm these still make sense
-    rebind(streamingAttribute, base, 'type', 'size', 'normalized', 'location', 'divisor', 'stride');
+    rebind(streamingAttribute, base, 'type', 'size', 'normalized', 'location', 'divisor', 'stride', 'offset');
 
     return streamingAttribute;
 };

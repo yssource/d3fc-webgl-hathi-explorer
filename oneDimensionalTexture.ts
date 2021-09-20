@@ -39,10 +39,7 @@ export default () => {
         if (!args.length) {
             return location;
         }
-        if (location !== args[0]) {
-            location = args[0];
-            dirty = true;
-        }
+        location = args[0];
         return oneDimensionalTexture;
     };
 

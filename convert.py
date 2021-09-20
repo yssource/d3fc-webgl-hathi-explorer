@@ -42,10 +42,15 @@ table = table.unify_dictionaries()
 mask = pc.invert(pc.is_null(table.column("date")))
 table = table.filter(mask)
 
+
 # sorting by the date improves the loading aesthetics
 # comment this out to exactly match the original appearance
 indices = pc.sort_indices(table, sort_keys=[("date", "ascending")])
 table = pc.take(table, indices)
+
+# replace ix with an accurate row index
+indices = pc.sort_indices(table, sort_keys=[("date", "ascending")])
+table = table.set_column(table.schema.get_field_index("ix"), "ix", pc.cast(indices, pa.uint32()))
 
 temp_path.unlink()
 
