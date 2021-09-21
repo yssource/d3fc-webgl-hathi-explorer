@@ -1,4 +1,4 @@
-import { webglProgramBuilder, webglUniform } from "d3fc";
+import { webglAttribute, webglProgramBuilder, webglUniform } from "d3fc";
 
 function getDefaultViewportSize(programBuilder) {
     const context = programBuilder.context();
@@ -14,39 +14,24 @@ precision mediump float;
 
 uniform float uTextureSize;
 uniform float uCanvasSize;
-uniform sampler2D uTexture;
-attribute vec2 aIndex;
-varying vec4 vFragColor;
+attribute vec2 aVertex;
 
 void main() {
-    float index = aIndex[0];
-
-    vec2 target = vec2(mod(index, uCanvasSize), floor(index / uCanvasSize));
-    // center on pixels
-    target = target + 0.5;
-    // convert to clip space
-    target = target / (uCanvasSize / 2.0) - 1.0;
-
-    gl_Position = vec4(target.x, target.y, 0.0, 1.0);
-    gl_PointSize = 1.0;
-
-    vec2 source = vec2(mod(index, uTextureSize), floor(index / uTextureSize));
-    // center on pixels
-    source = source + 0.5;
-    // convert to texture space
-    source = source / uTextureSize;
-
-    vFragColor = texture2D(uTexture, source);
+    gl_Position = vec4(aVertex.xy, 0.0, 1.0);
 }
 `;
 
 const fragmentShader = () => `
 precision mediump float;
 
-varying vec4 vFragColor;
+uniform sampler2D uTexture;
+uniform float uTextureSize;
+uniform float uCanvasSize;
 
 void main() {
-    gl_FragColor = vFragColor;
+    float index = (gl_FragCoord.y - 0.5) * uCanvasSize + (gl_FragCoord.x - 0.5) / uCanvasSize;
+    vec2 coord = vec2(mod(index, uTextureSize), floor(index / uTextureSize));
+    gl_FragColor = texture2D(uTexture, coord);
 }
 `;
 
@@ -54,6 +39,18 @@ export default () => {
     const toArrayProgramBuilder = webglProgramBuilder()
         .fragmentShader(fragmentShader)
         .vertexShader(vertexShader);
+    toArrayProgramBuilder.buffers()
+        .attribute('aVertex', webglAttribute()
+            .size(2)
+            .data([
+                [-1, -1],
+                [1, 1],
+                [-1, 1],
+                [-1, -1],
+                [1, 1],
+                [1, -1]
+            ])
+        );
 
     let location = -1;
     let dirty = true;
@@ -136,8 +133,7 @@ export default () => {
         pingPongTexture.enable(false);
 
         toArrayProgramBuilder.context(programBuilder.context())
-            .pixelRatio(programBuilder.pixelRatio())
-            .mode(programBuilder.context().POINTS);
+            .pixelRatio(programBuilder.pixelRatio());
 
         if (length == null || length > width * height) {
             throw new Error('Invalid length');
@@ -149,19 +145,18 @@ export default () => {
         }
 
         toArrayProgramBuilder.buffers()
-            .attribute('aIndex', programBuilder.buffers().attribute('aIndex')) // HACK!
             .uniform('uTexture', pingPongTexture)
             .uniform('uCanvasSize', webglUniform([viewportSize.width]))
             .uniform('uTextureSize', webglUniform([width]));
 
-        toArrayProgramBuilder(length);
+        toArrayProgramBuilder(6);
 
         const gl = toArrayProgramBuilder.context();
         for (let offset = 0; offset < length; offset += viewportSize.width) {
             // This is non-optimal if length >= viewportSize.width * 2
             gl.readPixels(0, 0, Math.min(length - offset, viewportSize.width), 1, gl.RGBA, gl.UNSIGNED_BYTE, array.subarray(offset));
         }
-        
+
         pingPongTexture.enable(_enable);
     };
 
