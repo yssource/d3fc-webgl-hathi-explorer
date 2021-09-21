@@ -1,14 +1,5 @@
 import { webglAttribute, webglProgramBuilder, webglUniform } from "d3fc";
 
-function getDefaultViewportSize(programBuilder) {
-    const context = programBuilder.context();
-    const pixelRatio = programBuilder.pixelRatio();
-    return {
-        width: context.canvas.width * pixelRatio,
-        height: context.canvas.height * pixelRatio
-    };
-}
-
 const vertexShader = () => `
 precision mediump float;
 
@@ -108,12 +99,11 @@ export default () => {
         gl.bindTexture(gl.TEXTURE_2D, textureA);
         gl.uniform1i(location, unit);
 
-        const viewportSize = getDefaultViewportSize(programBuilder);
         gl.viewport(
             0,
             0,
-            enable ? width : viewportSize.width,
-            enable ? height : viewportSize.height
+            enable ? width : gl.canvas.width,
+            enable ? height : gl.canvas.height
         );
         gl.bindFramebuffer(gl.FRAMEBUFFER, enable ? framebuffer : null);
 
@@ -135,36 +125,41 @@ export default () => {
         framebuffer = null;
     };
 
-    pingPongTexture.toArray = (programBuilder, array, count) => {
+    pingPongTexture.toArray = (gl, array, count) => {
         let _enable = enable;
         pingPongTexture.enable(false);
 
-        toArrayProgramBuilder.context(programBuilder.context())
-            .pixelRatio(programBuilder.pixelRatio());
+        toArrayProgramBuilder.context(gl);
 
         if (count == null || count > width * height) {
             throw new Error('Invalid length');
         }
 
-        const viewportSize = getDefaultViewportSize(programBuilder);
-        if (viewportSize.width * viewportSize.height < count) {
+        if (gl.canvas.width * gl.canvas.height < count) {
             throw new Error('Texture too large to extract in one pass');
         }
 
         toArrayProgramBuilder.buffers()
             .uniform('uTexture', pingPongTexture)
-            .uniform('uCanvasSize', webglUniform([viewportSize.width, viewportSize.height]))
+            .uniform('uCanvasSize', webglUniform([gl.canvas.width, gl.canvas.height]))
             .uniform('uTextureSize', webglUniform([width, height]))
             .uniform('uCount', webglUniform([count]));
 
         toArrayProgramBuilder(6);
 
-        const gl = toArrayProgramBuilder.context();
-        for (let offset = 0; offset < count; offset += viewportSize.width) {
-            // This is non-optimal if length >= viewportSize.width * 2 -
+        for (let offset = 0; offset < count; offset += gl.canvas.width) {
+            // This is non-optimal if length >= context.canvas.width * 2 -
             // reading 2 rectangles (one large of n rows and 1 partial row) 
             // would be more efficient
-            gl.readPixels(0, 0, Math.min(count - offset, viewportSize.width), 1, gl.RGBA, gl.UNSIGNED_BYTE, array.subarray(offset));
+            gl.readPixels(
+                0, 
+                0, 
+                Math.min(count - offset, gl.canvas.width), 
+                1, 
+                gl.RGBA, 
+                gl.UNSIGNED_BYTE, 
+                array.subarray(offset)
+            );
         }
 
         pingPongTexture.enable(_enable);
