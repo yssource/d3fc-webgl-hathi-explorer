@@ -139,8 +139,9 @@ export default function (maxByteLength) {
         while (i > 1)
         texture.enable(false);
 
-        const pixels = new Uint8Array(1 * 4);
-        texture.toArray(mapReduceProgramBuilder, pixels, 1);
+        const count = 1;
+        const pixels = new Uint8Array(count * 4);
+        texture.toArray(mapReduceProgramBuilder, pixels, count);
         const index = pixels[0] << 16 | pixels[1] << 8 | pixels[2];
         const distance = (1 - (pixels[3] / 256)) * 3;
 
