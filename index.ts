@@ -65,21 +65,15 @@ const indexAttribute = funkyAttribute()
   .type(fc.webglTypes.UNSIGNED_SHORT)
   .size(2);
 
-const seenIndices = new Set();
-
 const aThing = thing(1024);
 const pointSeries = funkyPointSeries(VALUE_BUFFER_SIZE);
 // typescript...
 pointSeries.decorate((programBuilder, data) => {
   indexAttribute.data(data.batches.map(columnValues('ix')));
-  // data.pointers[0] = {x: -17.02014846235419, y: 7.688229056203607};
   data.annotations = [];
   if (data.pointers[0] != null) {
     const { index, distance } = aThing(programBuilder, data, data.pointers[0], indexAttribute);
     if (distance < 2) {
-      seenIndices.add(index);
-      // console.log(data.pointers[0], index, data.table.get(index).getValue(6), data.table.get(index).getValue(7))
-      // console.log(seenIndices.size);
       data.annotations = [
         createAnnotationData(data.table.get(index))
       ];
@@ -118,20 +112,18 @@ const createAnnotationData = row => ({
 const run = async () => {
   const response = await fetch(arrowFile);
   const reader = await Arrow.RecordBatchReader.from(response);
+  const schema = (await reader.open()).schema;
   // configure the accessors
   // must access the underlying value arrays otherwise we'll end up with shallow copies which trips the dirty checks in the attribute
   pointSeries.crossValues(d => d.batches.map(columnValues('x')));
   pointSeries.mainValues(d => d.batches.map(columnValues('y')));
   for await (const recordBatch of reader) {
     data.batches.push(recordBatch);
-    // data.length = 512;
     data.length += recordBatch.length;
+    data.table = new Arrow.Table(schema, data.batches);
     document.querySelector('#loading>span').innerHTML = new Intl.NumberFormat().format(data.length) + ' points loaded';
     redraw();
-    break;
   }
-
-  data.table = new Arrow.Table(data.batches[0].schema, data.batches);
 };
 
 run();

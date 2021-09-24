@@ -6,6 +6,7 @@ export default () => {
     let textureB = null;
     let size = null;
     let framebuffer = null;
+    let depthBuffer = null;
     let enable = false;
 
     function configureTexture(gl, texture, blank) {
@@ -32,9 +33,15 @@ export default () => {
             framebuffer = gl.createFramebuffer();
         }
 
+        if (depthBuffer == null) {
+            depthBuffer = gl.createRenderbuffer();
+        }
+
         if (dirty) {
             configureTexture(gl, textureA, true);
             configureTexture(gl, textureB, false);
+            gl.bindRenderbuffer(gl.RENDERBUFFER, depthBuffer);
+            gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, size[0], size[1]);
             dirtyTexture = textureA;
             dirty = false;
         } else if (dirtyTexture) {
@@ -54,10 +61,14 @@ export default () => {
             enable ? size[1] : gl.canvas.height
         );
         gl.bindFramebuffer(gl.FRAMEBUFFER, enable ? framebuffer : null);
+        gl.bindRenderbuffer(gl.RENDERBUFFER, enable ? depthBuffer : null);
 
         if (enable) {
             const level = 0;
             gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, textureB, level);
+            // gl.clearColor(1, 1, 1, 1);   // clear to white
+            gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthBuffer);
+            gl.clear(gl.DEPTH_BUFFER_BIT);
 
             // swap the buffers
             const temp = textureA;
