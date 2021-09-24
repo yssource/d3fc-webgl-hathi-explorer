@@ -1,6 +1,7 @@
 import { webglBufferBuilder, webglProgramBuilder, webglUniform } from 'd3fc';
 import drawModes from '@d3fc/d3fc-webgl/src/program/drawModes';
 import pingPongTexture from './pingPongTexture';
+import readTexture_ from './readTexture';
 
 function copyBuffer(programBuilderSource, programBuilderDestination, type, name) {
     programBuilderDestination.buffers()
@@ -108,16 +109,16 @@ void main() {
 `;
 
 export default function (maxByteLength) {
+    const size = [PING_PONG_TEXTURE_SIZE, PING_PONG_TEXTURE_SIZE];
     const texture = pingPongTexture()
-        .width(PING_PONG_TEXTURE_SIZE)
-        .height(PING_PONG_TEXTURE_SIZE);
+        .size(size);
     const pointUniform = webglUniform();
     const mapProgramBuilder = webglProgramBuilder()
         .fragmentShader(mapFragmentShader)
         .vertexShader(mapVertexShader)
         .mode(drawModes.POINTS);
     mapProgramBuilder.buffers()
-        .uniform(`uTextureSize`, webglUniform([texture.width(), texture.height()]))
+        .uniform(`uTextureSize`, webglUniform(size))
         .uniform(`uTexture`, texture)
         .uniform(`uPoint`, pointUniform);
     const reduceProgramBuilder = webglProgramBuilder()
@@ -125,9 +126,12 @@ export default function (maxByteLength) {
         .vertexShader(reduceVertexShader)
         .mode(drawModes.POINTS);
     reduceProgramBuilder.buffers()
-        .uniform(`uTextureSize`, webglUniform([texture.width(), texture.height()]))
+        .uniform(`uTextureSize`, webglUniform(size))
         .uniform(`uTexture`, texture)
         .uniform(`uPoint`, pointUniform);
+    const readTexture = readTexture_()
+        .texture(texture)
+        .size([PING_PONG_TEXTURE_SIZE, PING_PONG_TEXTURE_SIZE]);
 
     const thing = function (programBuilder, data, { x = 0, y = 0 }, indexAttribute) {
         const dataLength = data.length;
@@ -136,6 +140,7 @@ export default function (maxByteLength) {
 
         mapProgramBuilder.context(context);
         reduceProgramBuilder.context(context);
+        readTexture.context(context);
 
         mapProgramBuilder.buffers()
             .attribute(`aIndex`, indexAttribute);
@@ -159,9 +164,7 @@ export default function (maxByteLength) {
         while (i > 1)
         texture.enable(false);
 
-        const count = 1;
-        const pixels = new Uint8Array(count * 4);
-        texture.toArray(context, pixels, count);
+        const pixels = readTexture(1);
         const index = pixels[0] << 16 | pixels[1] << 8 | pixels[2];
         const distance = (1 - (pixels[3] / 256)) * 3;
 
