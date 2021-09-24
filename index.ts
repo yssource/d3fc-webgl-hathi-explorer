@@ -4,28 +4,49 @@ import * as d3 from 'd3';
 import * as fc from 'd3fc';
 import { annotationCallout } from 'd3-svg-annotation';
 import * as Arrow from 'apache-arrow/Arrow';
-import funkyPointSeries from './streamingPointSeries';
-import funkyAttribute from './streamingAttribute';
+import streamingPointSeries from './streamingPointSeries';
+import streamingAttribute from './streamingAttribute';
 import indexedFillColor from './indexedFillColor';
+import closestPoint from './closestPoint';
+
 // @ts-ignore
 import arrowFile from './data.arrow';
-import thing from './thing';
 
 const VALUE_BUFFER_SIZE = 4e6; // 1M values * 4 byte value width
-const columnValues = columnName => batch => batch.select(columnName).getChildAt(0).values;
+
+// when configuring the accessors, we must access the underlying 
+// value arrays otherwise we'll end up with shallow copies which
+// will trip the dirty checks in streaming attribute
+const columnValues = (table, columnName) => table.select(columnName)
+  .getChildAt(0).chunks
+  .map(chunk => chunk.data.values);
+
+// cheap way of allowing an empty chart to render
+const EMPTY_TABLE = {
+  length: 0,
+  select() {
+    return {
+      getChildAt() {
+        return {
+          get chunks() {
+            return [];
+          }
+        }
+      }
+    }
+  }
+};
 
 const data = {
   pointers: [],
   annotations: [],
-  length: 0,
-  batches: [],
-  table: null
+  table: (<any>EMPTY_TABLE)
 };
 
-window.data = data;
+const hackyReferenceToTopLevelData = data;
 
 // compute the fill color for each datapoint
-const languageAttribute = funkyAttribute()
+const languageAttribute = streamingAttribute()
   .maxByteLength(VALUE_BUFFER_SIZE)
   // WebGL doesn't support 32-bit integers
   // because it's based around 32-bit floats.
@@ -39,7 +60,7 @@ const languageFill = indexedFillColor()
   .value(d => d3.color(d3.schemeCategory10[Math.round(d)]))
   .clamp(false);
 
-const yearAttribute = funkyAttribute()
+const yearAttribute = streamingAttribute()
   .maxByteLength(VALUE_BUFFER_SIZE)
   // WebGL doesn't support 32-bit integers
   // because it's based around 32-bit floats.
@@ -59,31 +80,6 @@ const yearFill = indexedFillColor()
 
 let fillColor = yearFill;
 
-// LSB - assume little endian
-const indexAttribute = funkyAttribute()
-  .maxByteLength(VALUE_BUFFER_SIZE)
-  .type(fc.webglTypes.UNSIGNED_SHORT)
-  .size(2);
-
-const aThing = thing(1024);
-const pointSeries = funkyPointSeries(VALUE_BUFFER_SIZE);
-// typescript...
-pointSeries.decorate((programBuilder, data) => {
-  indexAttribute.data(data.batches.map(columnValues('ix')));
-  data.annotations = [];
-  if (data.pointers[0] != null) {
-    const { index, distance } = aThing(programBuilder, data, data.pointers[0], indexAttribute);
-    if (distance < 2) {
-      data.annotations = [
-        createAnnotationData(data.table.get(index))
-      ];
-    }
-  }
-  languageAttribute.data(data.batches.map(columnValues('language')));
-  yearAttribute.data(data.batches.map(columnValues('date')));
-  fillColor(programBuilder);
-});
-
 // wire up the fill color selector
 for (const el of document.querySelectorAll('.controls a')) {
   el.addEventListener('click', () => {
@@ -95,6 +91,44 @@ for (const el of document.querySelectorAll('.controls a')) {
     redraw();
   });
 }
+
+const xScale = d3.scaleLinear().domain([-50, 50]);
+const yScale = d3.scaleLinear().domain([-50, 50]);
+
+// LSB - assume little endian
+const indexAttribute = streamingAttribute()
+  .maxByteLength(VALUE_BUFFER_SIZE)
+  .type(fc.webglTypes.UNSIGNED_SHORT)
+  .size(2);
+
+// typescript...
+const findClosestPoint = closestPoint(1024);
+(<any>findClosestPoint).indexValueAttribute(indexAttribute);
+const pointSeries = streamingPointSeries(VALUE_BUFFER_SIZE);
+pointSeries.crossValues(d => columnValues(d, 'x'));
+pointSeries.mainValues(d => columnValues(d, 'y'));
+pointSeries.decorate((programBuilder, data) => {
+  // using raw attributes means we need to explicitly pass the data in
+  languageAttribute.data(columnValues(data, 'language'));
+  yearAttribute.data(columnValues(data, 'date'));
+  indexAttribute.data(columnValues(data, 'ix'));
+
+  // configure
+  (<any>findClosestPoint).context(programBuilder.context())
+    .mainValueAttribute(programBuilder.buffers().attribute('aMainValue'))
+    .crossValueAttribute(programBuilder.buffers().attribute('aCrossValue'));
+
+  if (hackyReferenceToTopLevelData.pointers[0] != null) {
+    const { index, distance } = findClosestPoint(data.length, hackyReferenceToTopLevelData.pointers[0]);
+    hackyReferenceToTopLevelData.annotations = distance < 2 ? [
+      createAnnotationData(data.get(index))
+    ] : [];
+  } else {
+    hackyReferenceToTopLevelData.annotations = [];
+  }
+
+  fillColor(programBuilder);
+});
 
 const createAnnotationData = row => ({
   note: {
@@ -109,41 +143,21 @@ const createAnnotationData = row => ({
   dy: 20
 });
 
-const run = async () => {
-  const response = await fetch(arrowFile);
-  const reader = await Arrow.RecordBatchReader.from(response);
-  const schema = (await reader.open()).schema;
-  // configure the accessors
-  // must access the underlying value arrays otherwise we'll end up with shallow copies which trips the dirty checks in the attribute
-  pointSeries.crossValues(d => d.batches.map(columnValues('x')));
-  pointSeries.mainValues(d => d.batches.map(columnValues('y')));
-  for await (const recordBatch of reader) {
-    data.batches.push(recordBatch);
-    data.length += recordBatch.length;
-    data.table = new Arrow.Table(schema, data.batches);
-    document.querySelector('#loading>span').innerHTML = new Intl.NumberFormat().format(data.length) + ' points loaded';
-    redraw();
-  }
-};
-
-run();
-
-const xScale = d3.scaleLinear().domain([-50, 50]);
-const yScale = d3.scaleLinear().domain([-50, 50]);
-
-const pointer = fc.pointer().on('point', (pointers) => {
-  data.pointers = pointers.map(({ x, y }) => ({
-    x: xScale.invert(x),
-    y: yScale.invert(y)
-  }));
-
-  redraw();
-});
-
 const annotationSeries = seriesSvgAnnotation()
   .notePadding(15)
   .type(annotationCallout);
-const zoom = fc.zoom().on('zoom', redraw);
+
+const pointer = fc.pointer()
+  .on('point', (pointers) => {
+    data.pointers = pointers.map(({ x, y }) => ({
+      x: xScale.invert(x),
+      y: yScale.invert(y)
+    }));
+    redraw();
+  });
+
+const zoom = fc.zoom()
+  .on('zoom', redraw);
 
 const chart = fc
   .chartCartesian(xScale, yScale)
@@ -152,6 +166,7 @@ const chart = fc
     fc
       .seriesWebglMulti()
       .series([pointSeries])
+      .mapping(d => d.table)
   )
   .svgPlotArea(
     // only render the annotations series on the SVG layer
@@ -166,8 +181,28 @@ const chart = fc
       .call(zoom, xScale, yScale)
       .call(pointer);
   });
+
 // render the chart with the required data
 // Enqueues a redraw to occur on the next animation frame
 function redraw() {
-  d3.select('#chart').datum(data).call(chart);
+  d3.select('#chart')
+    .datum(data)
+    .call(chart);
 };
+
+// stream the data
+const loadData = async () => {
+  const response = await fetch(arrowFile);
+  const reader = await Arrow.RecordBatchReader.from(response);
+  await reader.open();
+  data.table = new Arrow.Table(reader.schema);
+  for await (const recordBatch of reader) {
+    data.table = data.table.concat(recordBatch);
+    document.querySelector('#loading>span').innerHTML =
+      new Intl.NumberFormat().format(data.table.length) + ' points loaded';
+    redraw();
+  }
+};
+
+redraw();
+loadData();

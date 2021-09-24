@@ -1,16 +1,8 @@
-import { webglProgramBuilder, webglUniform } from 'd3fc';
+import { rebind, webglProgramBuilder, webglUniform } from 'd3fc';
 import drawModes from '@d3fc/d3fc-webgl/src/program/drawModes';
 import pingPongTexture from './pingPongTexture';
 import readTexture_ from './readTexture';
-
-function copyBuffer(programBuilderSource, programBuilderDestination, type, name) {
-    programBuilderDestination.buffers()
-    [type](
-        name,
-        programBuilderSource.buffers()
-        [type](name)
-    );
-}
+import rebindCurry from '@d3fc/d3fc-webgl/src/rebindCurry';
 
 const mapVertexShader = () => `
 precision mediump float;
@@ -56,11 +48,11 @@ export default function (maxByteLength) {
     const texture = pingPongTexture()
         .size(size);
     const pointUniform = webglUniform();
-    const mapProgramBuilder = webglProgramBuilder()
+    const programBuilder = webglProgramBuilder()
         .fragmentShader(mapFragmentShader)
         .vertexShader(mapVertexShader)
         .mode(drawModes.POINTS);
-    mapProgramBuilder.buffers()
+    programBuilder.buffers()
         .uniform(`uViewportSize`, webglUniform(size))
         .uniform(`uTexture`, texture)
         .uniform(`uPoint`, pointUniform)
@@ -69,28 +61,17 @@ export default function (maxByteLength) {
         .texture(texture)
         .size(size);
 
-    const thing = function (programBuilder, data, { x = 0, y = 0 }, indexAttribute) {
-        const dataLength = data.length;
-
+    const closestPoint = function (count, { x = 0, y = 0 }) {
         const context = programBuilder.context();
-
-
-        mapProgramBuilder.context(context);
+        programBuilder.context(context);
         readTexture.context(context);
-
-        mapProgramBuilder.buffers()
-            .attribute(`aIndex`, indexAttribute);
 
         pointUniform.data([x, y]);
         texture.enable(true);
         context.enable(context.DEPTH_TEST);
         context.depthFunc(context.LESS);
 
-
-        copyBuffer(programBuilder, mapProgramBuilder, 'attribute', 'aMainValue');
-        copyBuffer(programBuilder, mapProgramBuilder, 'attribute', 'aCrossValue');
-
-        mapProgramBuilder(dataLength);
+        programBuilder(count);
 
         context.disable(context.DEPTH_TEST);
         texture.enable(false);
@@ -105,5 +86,28 @@ export default function (maxByteLength) {
         };
     };
 
-    return thing;
+    rebind(closestPoint, programBuilder, 'context');
+    rebindCurry(
+        closestPoint,
+        'mainValueAttribute',
+        programBuilder.buffers(),
+        'attribute',
+        'aMainValue'
+    );
+    rebindCurry(
+        closestPoint,
+        'crossValueAttribute',
+        programBuilder.buffers(),
+        'attribute',
+        'aCrossValue'
+    );
+    rebindCurry(
+        closestPoint,
+        'indexValueAttribute',
+        programBuilder.buffers(),
+        'attribute',
+        'aIndex'
+    );
+
+    return closestPoint;
 }
