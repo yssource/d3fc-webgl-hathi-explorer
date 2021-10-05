@@ -12,7 +12,7 @@ uniform float uMaxDistance;
 uniform vec2 uViewportSize;
 attribute float aCrossValue;
 attribute float aMainValue;
-attribute vec2 aIndex;
+attribute vec4 aIndex;
 varying vec4 vFragColor;
 
 void main() {
@@ -22,13 +22,10 @@ void main() {
     // distance calculated and converted to [0, 1]
     float distance = min(distance(uPoint, vec2(aCrossValue, aMainValue)), uMaxDistance) / uMaxDistance;
 
-    // 24-bit index split into 3 bytes and converted to [0, 1]
-    vec3 index = vec3(mod(aIndex[1], 256.0), floor(aIndex[0] / 256.0), mod(aIndex[0], 256.0)) / 255.0;
-
     gl_PointSize = 1.0;
     gl_Position = vec4(coord.x, coord.y, distance, 1.0);
 
-    vFragColor = vec4(index.x, index.y, index.z, distance);
+    vFragColor = vec4(aIndex[0], aIndex[1], aIndex[2], distance);
 }
 `;
 
@@ -61,32 +58,70 @@ export default function (maxByteLength) {
         .texture(texture)
         .size(size);
 
-    const closestPoint = function (count, { x = 0, y = 0 }) {
+    let point = null;
+    let read = null;
+
+    const closestPoint = function (data) {
         const context = programBuilder.context();
         programBuilder.context(context);
         readTexture.context(context);
 
-        pointUniform.data([x, y]);
+        pointUniform.data([point?.x, point?.y]);
         texture.enable(true);
+        context.disable(context.BLEND);
         context.enable(context.DEPTH_TEST);
         context.depthFunc(context.LESS);
 
-        programBuilder(count);
+        programBuilder(data.length);
 
         context.disable(context.DEPTH_TEST);
         texture.enable(false);
 
-        const pixels = readTexture(1);
-        const index = pixels[0] << 16 | pixels[1] << 8 | pixels[2];
-        const distance = (pixels[3] / 256) * maxDistance;
-
-        return {
-            index,
-            distance
-        };
+        if (read) {
+            const pixels = readTexture(1);
+            const index = pixels[2] << 16 | pixels[1] << 8 | pixels[0];
+            const distance = (pixels[3] / 256) * maxDistance;
+            read({ index, distance });
+        }
     };
 
-    rebind(closestPoint, programBuilder, 'context');
+    closestPoint.texture = texture;
+
+    closestPoint.xScale = (...args) => {
+        let xScale;
+        if (!args.length) {
+            return xScale;
+        }
+        xScale = args[0];
+        return closestPoint;
+    };
+
+    closestPoint.yScale = (...args) => {
+        let yScale;
+        if (!args.length) {
+            return yScale;
+        }
+        yScale = args[0];
+        return closestPoint;
+    };
+
+    closestPoint.point = (...args) => {
+        if (!args.length) {
+            return point;
+        }
+        point = args[0];
+        return closestPoint;
+    };
+
+    closestPoint.read = (...args) => {
+        if (!args.length) {
+            return read;
+        }
+        read = args[0];
+        return closestPoint;
+    };
+
+    rebind(closestPoint, programBuilder, 'context', 'pixelRatio');
     rebindCurry(
         closestPoint,
         'mainValueAttribute',
