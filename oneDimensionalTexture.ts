@@ -22,7 +22,7 @@ export default () => {
             gl.texImage2D(gl.TEXTURE_2D, level, gl.RGBA, width, height, border, gl.RGBA, gl.UNSIGNED_BYTE, data);
         }
 
-        const unit = 0;
+        const unit = 1;
         gl.activeTexture(gl.TEXTURE0 + unit);
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.uniform1i(location, unit);
