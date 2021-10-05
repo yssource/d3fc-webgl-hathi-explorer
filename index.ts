@@ -2,7 +2,6 @@ import { seriesSvgAnnotation } from './annotation-series.js';
 
 import * as d3 from 'd3';
 import * as fc from 'd3fc';
-import { annotationCallout } from 'd3-svg-annotation';
 import * as Arrow from 'apache-arrow/Arrow';
 import streamingPointSeries from './streamingPointSeries';
 import streamingAttribute from './streamingAttribute';
@@ -145,7 +144,7 @@ const createAnnotationData = row => ({
 
 const annotationSeries = seriesSvgAnnotation()
   .notePadding(15)
-  .type(annotationCallout);
+  .key(d => d.ix);
 
 const pointer = fc.pointer()
   .on('point', (pointers) => {
