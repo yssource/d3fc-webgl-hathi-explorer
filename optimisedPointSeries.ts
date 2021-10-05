@@ -5,6 +5,7 @@ import {
     webglScaleMapper
 } from 'd3fc';
 import webglConstantAttribute from '@d3fc/d3fc-webgl/src/buffer/constantAttribute'
+import circlePointShader from '@d3fc/d3fc-webgl/src/shaders/point/circle/baseShader'
 
 export default () => {
     const sizeAttribute = webglConstantAttribute();
@@ -28,6 +29,7 @@ export default () => {
 
         draw.xScale(xWebglScale)
             .yScale(yWebglScale)
+            .type(circlePointShader())
             .decorate(programBuilder => {
                 decorate(programBuilder, data, 0);
             });
