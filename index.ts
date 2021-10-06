@@ -3,7 +3,7 @@ import { seriesSvgAnnotation } from './annotation-series.js';
 import * as d3 from 'd3';
 import * as fc from 'd3fc';
 import * as Arrow from 'apache-arrow/Arrow';
-import streamingPointSeries from './streamingPointSeries';
+import optimisedPointSeries from './optimisedPointSeries';
 import streamingAttribute from './streamingAttribute';
 import indexedFillColor from './indexedFillColor';
 import closestPoint from './closestPoint';
@@ -16,25 +16,22 @@ const VALUE_BUFFER_SIZE = 4e6; // 1M values * 4 byte value width
 // when configuring the accessors, we must access the underlying 
 // value arrays otherwise we'll end up with shallow copies which
 // will trip the dirty checks in streaming attribute
-const columnValues = (table, columnName) => table.select(columnName)
-  .getChildAt(0).chunks
-  .map(chunk => chunk.data.values);
+// const columnValues = (table, columnName) => table.select(columnName)
+//   .getChildAt(0).chunks
+//   .map(chunk => chunk.data.values);
+const columnValues = (table, columnName) => {
+  if (table.length === 0) {
+    return [];
+  }
+  const index = table.getColumnIndex(columnName);
+  return table.chunks.map(chunk => chunk.data.childData[index].values);
+};
 
 // cheap way of allowing an empty chart to render
-const EMPTY_TABLE = {
-  length: 0,
-  select() {
-    return {
-      getChildAt() {
-        return {
-          get chunks() {
-            return [];
-          }
-        }
-      }
-    }
-  }
-};
+const EMPTY_TABLE = [];
+
+// sentinel value for signaling a read from WebGL is required
+const PENDING_READ = [];
 
 const data = {
   pointers: [],
@@ -42,7 +39,7 @@ const data = {
   table: (<any>EMPTY_TABLE)
 };
 
-const hackyReferenceToTopLevelData = data;
+(<any>window).data = data;
 
 // compute the fill color for each datapoint
 const languageAttribute = streamingAttribute()
@@ -97,47 +94,71 @@ const yScale = d3.scaleLinear().domain([-50, 50]);
 // LSB - assume little endian
 const indexAttribute = streamingAttribute()
   .maxByteLength(VALUE_BUFFER_SIZE)
-  .type(fc.webglTypes.UNSIGNED_SHORT)
-  .size(2);
+  .type(fc.webglTypes.UNSIGNED_BYTE)
+  .size(4)
+  .normalized(true);
+
+const crossValueAttribute = streamingAttribute()
+  .maxByteLength(VALUE_BUFFER_SIZE);
+const mainValueAttribute = streamingAttribute()
+  .maxByteLength(VALUE_BUFFER_SIZE);
 
 // typescript...
 const findClosestPoint = closestPoint(1024);
+(<any>findClosestPoint).crossValueAttribute(crossValueAttribute);
+(<any>findClosestPoint).mainValueAttribute(mainValueAttribute);
 (<any>findClosestPoint).indexValueAttribute(indexAttribute);
-const pointSeries = streamingPointSeries(VALUE_BUFFER_SIZE);
-pointSeries.crossValues(d => columnValues(d, 'x'));
-pointSeries.mainValues(d => columnValues(d, 'y'));
-pointSeries.decorate((programBuilder, data) => {
-  // using raw attributes means we need to explicitly pass the data in
-  languageAttribute.data(columnValues(data, 'language'));
-  yearAttribute.data(columnValues(data, 'date'));
-  indexAttribute.data(columnValues(data, 'ix'));
-
-  // configure
-  (<any>findClosestPoint).context(programBuilder.context())
-    .mainValueAttribute(programBuilder.buffers().attribute('aMainValue'))
-    .crossValueAttribute(programBuilder.buffers().attribute('aCrossValue'));
-
-  if (hackyReferenceToTopLevelData.pointers[0] != null) {
-    const { index, distance } = findClosestPoint(data.length, hackyReferenceToTopLevelData.pointers[0]);
-    hackyReferenceToTopLevelData.annotations = distance < 2 ? [
-      createAnnotationData(data.get(index))
-    ] : [];
-  } else {
-    hackyReferenceToTopLevelData.annotations = [];
-  }
+const pointSeries = optimisedPointSeries(VALUE_BUFFER_SIZE);
+(<any>pointSeries).crossValueAttribute(crossValueAttribute);
+(<any>pointSeries).mainValueAttribute(mainValueAttribute);
+pointSeries.decorate((programBuilder) => {
+  const gl = programBuilder.context();
+  gl.disable(gl.BLEND);
 
   fillColor(programBuilder);
 });
 
+// would prefer a stroked outline but the stroke stuff isn't up to snuff
+const highlightFillColor = fc.webglFillColor([0.3, 0.3, 0.3, 0.6]);
+const highlightPointSeries = optimisedPointSeries(VALUE_BUFFER_SIZE);
+(<any>highlightPointSeries).crossValueAttribute(crossValueAttribute);
+(<any>highlightPointSeries).mainValueAttribute(mainValueAttribute);
+highlightPointSeries.decorate((programBuilder) => {
+  const gl = programBuilder.context();
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  programBuilder.vertexShader()
+    .appendHeader('uniform sampler2D uTexture;')
+    .appendHeader('attribute vec4 aIndex;')
+    .appendBody(`
+        vec4 sample = texture2D(uTexture, vec2(0.5, 0.5));
+        if (!all(equal(aIndex.xyz, sample.xyz))) {
+          // could specify vDefined = 0.0; but this is quicker
+          gl_PointSize = 0.0;
+        }
+    `);
+  // Would be preferable to make this configurable
+  programBuilder.buffers()
+    .attribute('aSize').value([100]);
+  programBuilder.buffers()
+    .uniform('uTexture', findClosestPoint.texture)
+    .attribute('aIndex', indexAttribute);
+  highlightFillColor(programBuilder);
+});
+
+
 const createAnnotationData = row => ({
+  ix: row.getValue(row.getIndex('ix')),
   note: {
     label: row.getValue(row.getIndex('first_author_name')) +
       ' ' + row.getValue(row.getIndex('date')),
     bgPadding: 5,
     title: row.getValue(row.getIndex('title')).replace(/(.{100}).*/, '$1...')
   },
-  x: row.getValue(row.getIndex('x')),
-  y: row.getValue(row.getIndex('y')),
+  data: {
+    x: row.getValue(row.getIndex('x')),
+    y: row.getValue(row.getIndex('y'))
+  },
   dx: 20,
   dy: 20
 });
@@ -146,12 +167,38 @@ const annotationSeries = seriesSvgAnnotation()
   .notePadding(15)
   .key(d => d.ix);
 
+let debounceTimer = null;
+
 const pointer = fc.pointer()
   .on('point', (pointers) => {
+    // convert the point to domain values
     data.pointers = pointers.map(({ x, y }) => ({
       x: xScale.invert(x),
       y: yScale.invert(y)
     }));
+
+    const point = data.pointers[0];
+
+    // clear any scheduled reads
+    clearTimeout(debounceTimer);
+
+    // clear the annotation if the pointer leaves the area
+    // otherwise let it linger until it is updated
+    if (point == null) {
+      data.annotations = [];
+      return;
+    }
+
+    // push the point into WebGL
+    findClosestPoint.point(point);
+
+    // schedule a read of the closest data point back
+    // from WebGL
+    debounceTimer = setTimeout(() => {
+      data.annotations = PENDING_READ;
+      redraw();
+    }, 100);
+
     redraw();
   });
 
@@ -164,7 +211,7 @@ const chart = fc
     // only render the point series on the WebGL layer
     fc
       .seriesWebglMulti()
-      .series([pointSeries])
+      .series([pointSeries, findClosestPoint, highlightPointSeries])
       .mapping(d => d.table)
   )
   .svgPlotArea(
@@ -181,18 +228,53 @@ const chart = fc
       .call(pointer);
   });
 
+const readClosestPoint = ({ index, distance }) => {
+  const currentPoint = data.pointers[0];
+  findClosestPoint.point(currentPoint);
+
+  // ensure the read is not for a stale point
+  const previousPoint = findClosestPoint.point();
+  if (
+    previousPoint?.x !== currentPoint?.x ||
+    previousPoint?.y !== currentPoint?.y
+  ) {
+    return;
+  }
+
+  // create an annotation for the read value
+  data.annotations = [
+    createAnnotationData(data.table.get(index))
+  ];
+
+  // no need to schedule a redraw because the SVG 
+  // series are rendered after the WebGL series
+};
+
 // render the chart with the required data
 // Enqueues a redraw to occur on the next animation frame
 function redraw() {
+  // using raw attributes means we need to explicitly pass the data in
+  crossValueAttribute.data(columnValues(data.table, 'x'));
+  mainValueAttribute.data(columnValues(data.table, 'y'));
+  languageAttribute.data(columnValues(data.table, 'language'));
+  yearAttribute.data(columnValues(data.table, 'date'));
+  indexAttribute.data(columnValues(data.table, 'ix'));
+
+  // should be an event with an enable flag
+  if (data.table.length > 0) {
+    findClosestPoint.read(data.annotations === PENDING_READ ? readClosestPoint : null);
+  }
+
   d3.select('#chart')
     .datum(data)
     .call(chart);
-};
+
+}
 
 // stream the data
 const loadData = async () => {
-  const response = await fetch(arrowFile);
-  const reader = await Arrow.RecordBatchReader.from(response);
+  let response = await fetch(arrowFile);
+  let reader = await Arrow.RecordBatchReader.from(response);
   await reader.open();
   data.table = new Arrow.Table(reader.schema);
   for await (const recordBatch of reader) {
