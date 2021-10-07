@@ -9,7 +9,7 @@ import indexedFillColor from './indexedFillColor';
 import closestPoint from './closestPoint';
 
 // @ts-ignore
-import arrowFile from './data.arrow';
+import arrowFile from './data.arrows';
 
 const VALUE_BUFFER_SIZE = 4e6; // 1M values * 4 byte value width
 
