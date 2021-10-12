@@ -1,5 +1,4 @@
 import { rebind, webglBaseAttribute } from 'd3fc';
-import { getArrayViewConstructor } from '@d3fc/d3fc-webgl/src/buffer/types';
 
 type TypedArray = Int8Array | Uint8Array | Int16Array | Uint16Array | Int32Array | Uint32Array | Uint8ClampedArray | Float32Array | Float64Array;
 
@@ -11,13 +10,6 @@ export default () => {
 
     const streamingAttribute: any = programBuilder => {
         base(programBuilder);
-
-        const expectedType = getArrayViewConstructor(base.type());
-
-        const combinedByteLength = data.reduce((sum, { byteLength }) => sum + byteLength, 0);
-        if (combinedByteLength > maxByteLength) {
-            throw new Error(`Combined byteLength ${combinedByteLength} > maxBytelength ${maxByteLength}`);
-        }
         
         const gl = programBuilder.context();
         gl.bindBuffer(gl.ARRAY_BUFFER, base.buffer());
@@ -27,17 +19,9 @@ export default () => {
             previousData = [];
         }
 
-        const previousCombinedByteLength = previousData.reduce((sum, { byteLength }) => sum + byteLength, 0);
-        if (combinedByteLength < previousCombinedByteLength) {
-            console.warn(`Not sure if this is important yet`);
-        }
-
         let offset = 0;
         let remainingInvalid = false;
         for (let i = 0; i < data.length; i++) {
-            // if (!(data[i] instanceof expectedType)) {
-            //     throw new Error(`Unexpected array type - expecting ${expectedType}`);
-            // }
             if (previousData[i] == null || data[i].byteLength !== previousData[i].byteLength) {
                 remainingInvalid = true;
             }

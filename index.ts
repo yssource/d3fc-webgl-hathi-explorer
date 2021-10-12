@@ -3,7 +3,7 @@ import { seriesSvgAnnotation } from './annotation-series.js';
 import * as d3 from 'd3';
 import * as fc from 'd3fc';
 import * as Arrow from 'apache-arrow/Arrow';
-import optimisedPointSeries from './optimisedPointSeries';
+import bespokePointSeries from './optimisedPointSeries';
 import streamingAttribute from './streamingAttribute';
 import indexedFillColor from './indexedFillColor';
 import closestPoint from './closestPoint';
@@ -11,7 +11,7 @@ import closestPoint from './closestPoint';
 // @ts-ignore
 import arrowFile from './data.arrows';
 
-const VALUE_BUFFER_SIZE = 4e6; // 1M values * 4 byte value width
+const MAX_BUFFER_SIZE = 4e6; // 1M values * 4 byte value width
 
 // when configuring the accessors, we must access the underlying 
 // value arrays otherwise we'll end up with shallow copies which
@@ -20,15 +20,10 @@ const VALUE_BUFFER_SIZE = 4e6; // 1M values * 4 byte value width
 //   .getChildAt(0).chunks
 //   .map(chunk => chunk.data.values);
 const columnValues = (table, columnName) => {
-  if (table.length === 0) {
-    return [];
-  }
   const index = table.getColumnIndex(columnName);
-  return table.chunks.map(chunk => chunk.data.childData[index].values);
+  return table.chunks.filter(chunk => chunk.length > 0)
+    .map(chunk => chunk.data.childData[index].values);
 };
-
-// cheap way of allowing an empty chart to render
-const EMPTY_TABLE = [];
 
 // sentinel value for signaling a read from WebGL is required
 const PENDING_READ = [];
@@ -36,14 +31,14 @@ const PENDING_READ = [];
 const data = {
   pointers: [],
   annotations: [],
-  table: (<any>EMPTY_TABLE)
+  table: Arrow.Table.empty()
 };
 
 (<any>window).data = data;
 
 // compute the fill color for each datapoint
 const languageAttribute = streamingAttribute()
-  .maxByteLength(VALUE_BUFFER_SIZE)
+  .maxByteLength(MAX_BUFFER_SIZE)
   // WebGL doesn't support 32-bit integers
   // because it's based around 32-bit floats.
   // Therefore, ignore 16 most significant bits.
@@ -57,7 +52,7 @@ const languageFill = indexedFillColor()
   .clamp(false);
 
 const yearAttribute = streamingAttribute()
-  .maxByteLength(VALUE_BUFFER_SIZE)
+  .maxByteLength(MAX_BUFFER_SIZE)
   // WebGL doesn't support 32-bit integers
   // because it's based around 32-bit floats.
   // Therefore, ignore 16 most significant bits.
@@ -93,22 +88,22 @@ const yScale = d3.scaleLinear().domain([-50, 50]);
 
 // LSB - assume little endian
 const indexAttribute = streamingAttribute()
-  .maxByteLength(VALUE_BUFFER_SIZE)
+  .maxByteLength(MAX_BUFFER_SIZE)
   .type(fc.webglTypes.UNSIGNED_BYTE)
   .size(4)
   .normalized(true);
 
 const crossValueAttribute = streamingAttribute()
-  .maxByteLength(VALUE_BUFFER_SIZE);
+  .maxByteLength(MAX_BUFFER_SIZE);
 const mainValueAttribute = streamingAttribute()
-  .maxByteLength(VALUE_BUFFER_SIZE);
+  .maxByteLength(MAX_BUFFER_SIZE);
 
 // typescript...
 const findClosestPoint = closestPoint(1024);
 (<any>findClosestPoint).crossValueAttribute(crossValueAttribute);
 (<any>findClosestPoint).mainValueAttribute(mainValueAttribute);
 (<any>findClosestPoint).indexValueAttribute(indexAttribute);
-const pointSeries = optimisedPointSeries(VALUE_BUFFER_SIZE);
+const pointSeries = bespokePointSeries();
 (<any>pointSeries).crossValueAttribute(crossValueAttribute);
 (<any>pointSeries).mainValueAttribute(mainValueAttribute);
 pointSeries.decorate((programBuilder) => {
@@ -120,7 +115,7 @@ pointSeries.decorate((programBuilder) => {
 
 // would prefer a stroked outline but the stroke stuff isn't up to snuff
 const highlightFillColor = fc.webglFillColor([0.3, 0.3, 0.3, 0.6]);
-const highlightPointSeries = optimisedPointSeries(VALUE_BUFFER_SIZE);
+const highlightPointSeries = bespokePointSeries();
 (<any>highlightPointSeries).crossValueAttribute(crossValueAttribute);
 (<any>highlightPointSeries).mainValueAttribute(mainValueAttribute);
 highlightPointSeries.decorate((programBuilder) => {
@@ -273,8 +268,8 @@ function redraw() {
 
 // stream the data
 const loadData = async () => {
-  let response = await fetch(arrowFile);
-  let reader = await Arrow.RecordBatchReader.from(response);
+  const response = await fetch(arrowFile);
+  const reader = await Arrow.RecordBatchReader.from(response);
   await reader.open();
   data.table = new Arrow.Table(reader.schema);
   for await (const recordBatch of reader) {
