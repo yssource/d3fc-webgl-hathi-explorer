@@ -95,7 +95,7 @@ export default () => {
         return indexedFillColor;
     };
 
-    rebind(indexedFillColor, textureUniform, 'clamp');
+    rebind(indexedFillColor, textureUniform, 'clamp', 'unit');
 
     return indexedFillColor;
 };

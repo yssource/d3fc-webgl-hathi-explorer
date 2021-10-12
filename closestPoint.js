@@ -39,11 +39,12 @@ void main() {
 }
 `;
 
-export default function (maxByteLength) {
+export default function () {
     const maxDistance = 20;
     const size = [1, 1];
     const texture = pingPongTexture()
-        .size(size);
+        .size(size)
+        .unit(0);
     const pointUniform = webglUniform();
     const programBuilder = webglProgramBuilder()
         .fragmentShader(mapFragmentShader)
@@ -122,6 +123,7 @@ export default function (maxByteLength) {
     };
 
     rebind(closestPoint, programBuilder, 'context', 'pixelRatio');
+    rebind(closestPoint, texture, 'unit');
     rebindCurry(
         closestPoint,
         'mainValueAttribute',

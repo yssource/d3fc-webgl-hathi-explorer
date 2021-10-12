@@ -23,7 +23,7 @@ export default () => {
         sizeAttribute.value([1]);
         definedAttribute.value([true]);
 
-        // The following assumes there is no d3 scale required
+        // the following assumes there is no d3 scale required
         const xWebglScale = webglScaleMapper(xScale).webglScale;
         const yWebglScale = webglScaleMapper(yScale).webglScale;
 
@@ -61,6 +61,7 @@ export default () => {
         return streamingPointSeries;
     };
 
+    // this is where the attributes are exposed to the consumer
     rebind(streamingPointSeries, draw, 'context', 'pixelRatio', 'type', 'mainValueAttribute', 'crossValueAttribute');
 
     return streamingPointSeries;

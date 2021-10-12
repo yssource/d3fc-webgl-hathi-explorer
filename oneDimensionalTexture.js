@@ -4,6 +4,7 @@ export default () => {
     let clamp = false;
     let dirty = true;
     let texture = null;
+    let unit = 0;
 
     const oneDimensionalTexture = programBuilder => {
         const gl = programBuilder.context();
@@ -62,6 +63,14 @@ export default () => {
             clamp = args[0];
             dirty = true;
         }
+        return oneDimensionalTexture;
+    };
+
+    oneDimensionalTexture.unit = (...args) => {
+        if (!args.length) {
+            return unit;
+        }
+        unit = args[0];
         return oneDimensionalTexture;
     };
 

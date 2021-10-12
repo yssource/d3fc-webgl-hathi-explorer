@@ -1,14 +1,12 @@
 import { rebind, webglBaseAttribute } from 'd3fc';
 
-type TypedArray = Int8Array | Uint8Array | Int16Array | Uint16Array | Int32Array | Uint32Array | Uint8ClampedArray | Float32Array | Float64Array;
-
 export default () => {
     const base = webglBaseAttribute();
-    let data: TypedArray[] = [];
-    let previousData: TypedArray[] = null;
-    let maxByteLength: number = 0;
+    let data = [];
+    let previousData = null;
+    let maxByteLength = 0;
 
-    const streamingAttribute: any = programBuilder => {
+    const streamingAttribute = programBuilder => {
         base(programBuilder);
         
         const gl = programBuilder.context();

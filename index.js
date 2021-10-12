@@ -1,24 +1,17 @@
-import { seriesSvgAnnotation } from './annotation-series.js';
+import { seriesSvgAnnotation } from './annotationSeries.js';
 
 import * as d3 from 'd3';
 import * as fc from 'd3fc';
 import * as Arrow from 'apache-arrow/Arrow';
-import bespokePointSeries from './optimisedPointSeries';
+import bespokePointSeries from './bespokePointSeries';
 import streamingAttribute from './streamingAttribute';
 import indexedFillColor from './indexedFillColor';
 import closestPoint from './closestPoint';
 
-// @ts-ignore
 import arrowFile from './data.arrows';
 
 const MAX_BUFFER_SIZE = 4e6; // 1M values * 4 byte value width
 
-// when configuring the accessors, we must access the underlying 
-// value arrays otherwise we'll end up with shallow copies which
-// will trip the dirty checks in streaming attribute
-// const columnValues = (table, columnName) => table.select(columnName)
-//   .getChildAt(0).chunks
-//   .map(chunk => chunk.data.values);
 const columnValues = (table, columnName) => {
   const index = table.getColumnIndex(columnName);
   return table.chunks.filter(chunk => chunk.length > 0)
@@ -34,7 +27,10 @@ const data = {
   table: Arrow.Table.empty()
 };
 
-(<any>window).data = data;
+// bufferBuilder doesn't automatically assign texture units
+// so we manually assign them here
+const CLOSEST_POINT_TEXTURE_UNIT = 0;
+const FILL_COLOR_TEXTURE_UNIT = 1;
 
 // compute the fill color for each datapoint
 const languageAttribute = streamingAttribute()
@@ -49,7 +45,8 @@ const languageFill = indexedFillColor()
   .attribute(languageAttribute)
   .range([0, d3.schemeCategory10.length - 1])
   .value(d => d3.color(d3.schemeCategory10[Math.round(d)]))
-  .clamp(false);
+  .clamp(false)
+  .unit(FILL_COLOR_TEXTURE_UNIT);
 
 const yearAttribute = streamingAttribute()
   .maxByteLength(MAX_BUFFER_SIZE)
@@ -67,7 +64,8 @@ const yearFill = indexedFillColor()
   .attribute(yearAttribute)
   .range(yearColorScale.domain())
   .value(d => d3.color(yearColorScale(d)))
-  .clamp(true);
+  .clamp(true)
+  .unit(FILL_COLOR_TEXTURE_UNIT);
 
 let fillColor = yearFill;
 
@@ -86,7 +84,6 @@ for (const el of document.querySelectorAll('.controls a')) {
 const xScale = d3.scaleLinear().domain([-50, 50]);
 const yScale = d3.scaleLinear().domain([-50, 50]);
 
-// LSB - assume little endian
 const indexAttribute = streamingAttribute()
   .maxByteLength(MAX_BUFFER_SIZE)
   .type(fc.webglTypes.UNSIGNED_BYTE)
@@ -98,48 +95,47 @@ const crossValueAttribute = streamingAttribute()
 const mainValueAttribute = streamingAttribute()
   .maxByteLength(MAX_BUFFER_SIZE);
 
-// typescript...
-const findClosestPoint = closestPoint(1024);
-(<any>findClosestPoint).crossValueAttribute(crossValueAttribute);
-(<any>findClosestPoint).mainValueAttribute(mainValueAttribute);
-(<any>findClosestPoint).indexValueAttribute(indexAttribute);
-const pointSeries = bespokePointSeries();
-(<any>pointSeries).crossValueAttribute(crossValueAttribute);
-(<any>pointSeries).mainValueAttribute(mainValueAttribute);
-pointSeries.decorate((programBuilder) => {
-  const gl = programBuilder.context();
-  gl.disable(gl.BLEND);
+const findClosestPoint = closestPoint()
+  .crossValueAttribute(crossValueAttribute)
+  .mainValueAttribute(mainValueAttribute)
+  .indexValueAttribute(indexAttribute)
+  .unit(CLOSEST_POINT_TEXTURE_UNIT);
 
-  fillColor(programBuilder);
-});
+const pointSeries = bespokePointSeries()
+  .crossValueAttribute(crossValueAttribute)
+  .mainValueAttribute(mainValueAttribute)
+  .decorate((programBuilder) => {
+    const gl = programBuilder.context();
+    gl.disable(gl.BLEND);
 
-// would prefer a stroked outline but the stroke stuff isn't up to snuff
+    fillColor(programBuilder);
+  });
+
 const highlightFillColor = fc.webglFillColor([0.3, 0.3, 0.3, 0.6]);
-const highlightPointSeries = bespokePointSeries();
-(<any>highlightPointSeries).crossValueAttribute(crossValueAttribute);
-(<any>highlightPointSeries).mainValueAttribute(mainValueAttribute);
-highlightPointSeries.decorate((programBuilder) => {
-  const gl = programBuilder.context();
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-  programBuilder.vertexShader()
-    .appendHeader('uniform sampler2D uTexture;')
-    .appendHeader('attribute vec4 aIndex;')
-    .appendBody(`
-        vec4 sample = texture2D(uTexture, vec2(0.5, 0.5));
-        if (!all(equal(aIndex.xyz, sample.xyz))) {
-          // could specify vDefined = 0.0; but this is quicker
-          gl_PointSize = 0.0;
-        }
-    `);
-  // Would be preferable to make this configurable
-  programBuilder.buffers()
-    .attribute('aSize').value([100]);
-  programBuilder.buffers()
-    .uniform('uTexture', findClosestPoint.texture)
-    .attribute('aIndex', indexAttribute);
-  highlightFillColor(programBuilder);
-});
+const highlightPointSeries = bespokePointSeries()
+  .crossValueAttribute(crossValueAttribute)
+  .mainValueAttribute(mainValueAttribute)
+  .decorate((programBuilder) => {
+    const gl = programBuilder.context();
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    programBuilder.vertexShader()
+      .appendHeader('uniform sampler2D uTexture;')
+      .appendHeader('attribute vec4 aIndex;')
+      .appendBody(`
+          vec4 sample = texture2D(uTexture, vec2(0.5, 0.5));
+          if (!all(equal(aIndex.xyz, sample.xyz))) {
+            // could specify vDefined = 0.0; but this is quicker
+            gl_PointSize = 0.0;
+          }
+      `);
+    programBuilder.buffers()
+      .attribute('aSize').value([100]);
+    programBuilder.buffers()
+      .uniform('uTexture', findClosestPoint.texture)
+      .attribute('aIndex', indexAttribute);
+    highlightFillColor(programBuilder);
+  });
 
 
 const createAnnotationData = row => ({
@@ -223,7 +219,7 @@ const chart = fc
       .call(pointer);
   });
 
-const readClosestPoint = ({ index, distance }) => {
+const readClosestPoint = ({ index }) => {
   const currentPoint = data.pointers[0];
   findClosestPoint.point(currentPoint);
 
@@ -255,7 +251,6 @@ function redraw() {
   yearAttribute.data(columnValues(data.table, 'date'));
   indexAttribute.data(columnValues(data.table, 'ix'));
 
-  // should be an event with an enable flag
   if (data.table.length > 0) {
     findClosestPoint.read(data.annotations === PENDING_READ ? readClosestPoint : null);
   }

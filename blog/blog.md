@@ -473,9 +473,9 @@ Certainly adding them in in their current form wouldn't work. It is also true th
 
 <iframe></iframe>
 
-## Conclusion
-
 Sadly I've run out of space to explain in detail how these features work, but the gist of it involves embracing the massively parallel nature of the GPU to perform these calculations on the fly. Along with a fair bit of fitting square-peg Arrow types into round-hole WebGL types.
+
+## Conclusion
 
 There are always a number of trade-offs to be made when rendering large datasets. In this post we've explored one-way to minimise the work performed by the CPU, at the expense of some data pre-processing and network bandwidth. 
 

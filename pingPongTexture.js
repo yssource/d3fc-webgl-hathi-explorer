@@ -8,6 +8,7 @@ export default () => {
     let framebuffer = null;
     let depthBuffer = null;
     let enable = false;
+    let unit = 0;
 
     function configureTexture(gl, texture, blank) {
         gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -49,7 +50,6 @@ export default () => {
             dirtyTexture = null;
         }
 
-        const unit = 0;
         gl.activeTexture(gl.TEXTURE0 + unit);
         gl.bindTexture(gl.TEXTURE_2D, textureA);
         gl.uniform1i(location, unit);
@@ -109,6 +109,14 @@ export default () => {
         if (enable !== args[0]) {
             enable = args[0];
         }
+        return pingPongTexture;
+    };
+
+    pingPongTexture.unit = (...args) => {
+        if (!args.length) {
+            return unit;
+        }
+        unit = args[0];
         return pingPongTexture;
     };
 
