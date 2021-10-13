@@ -26,7 +26,7 @@ WebGL lives for good old fashioned Float32Arrays. Being able to let rip on those
 
 The problem is, D3 datasets tend not to hang out with the hipster buffer crowd. Preferring instead to stick to the UTF-8 string encodings they grew up with. Whilst they might occasionally spice things up, in their eyes nothing beats good old fashioned DSV (delimiter separated format e.g. CSV, TSV) format for simplicity, longevity and often just the ready availability of encoders/decoders.
 
-<img src="super-js.png" width=320 height=240 alt="Bad attempt at a JS superhero logo"/>
+<img src="js-super.png" width=320 height=240 alt="Bad attempt at a JS superhero logo"/>
 
 Luckily, eschewing buffer encoding doesn't leave WebGL stuck. As Colin's demo showed, the hero of our story, JavaScript, steps up to the task. Putting in an enormous effort to transform between encodings as the data streams in.
 

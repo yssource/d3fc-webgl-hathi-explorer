@@ -132,7 +132,7 @@ const highlightPointSeries = bespokePointSeries()
     programBuilder.buffers()
       .attribute('aSize').value([100]);
     programBuilder.buffers()
-      .uniform('uTexture', findClosestPoint.texture)
+      .uniform('uTexture', findClosestPoint.texture())
       .attribute('aIndex', indexAttribute);
     highlightFillColor(programBuilder);
   });

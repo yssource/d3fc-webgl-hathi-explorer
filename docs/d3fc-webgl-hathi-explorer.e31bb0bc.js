@@ -71432,12 +71432,12 @@ Object.defineProperty(exports, "__esModule", {
 exports.default = void 0;
 
 var _default = () => {
-  let location = -1;
+  let location = null;
   let data = null;
   let clamp = false;
   let dirty = true;
   let texture = null;
-  let unit = 0;
+  let unit = null;
 
   const oneDimensionalTexture = programBuilder => {
     const gl = programBuilder.context();
@@ -71459,11 +71459,16 @@ var _default = () => {
       gl.texImage2D(gl.TEXTURE_2D, level, gl.RGBA, width, height, border, gl.RGBA, gl.UNSIGNED_BYTE, data);
     }
 
-    const unit = 1;
-    gl.activeTexture(gl.TEXTURE0 + unit);
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.uniform1i(location, unit);
+    if (location != null) {
+      // allow the texture to be used without binding 
+      // e.g. as a framebuffer
+      gl.activeTexture(gl.TEXTURE0 + unit);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.uniform1i(location, unit);
+    }
+
     dirty = false;
+    return texture;
   };
 
   oneDimensionalTexture.clear = () => {
@@ -71649,295 +71654,7 @@ var _default = {
   TRIANGLE_FAN: 6
 };
 exports.default = _default;
-},{}],"pingPongTexture.js":[function(require,module,exports) {
-"use strict";
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-exports.default = void 0;
-
-var _default = () => {
-  let location = -1;
-  let dirty = true;
-  let dirtyTexture = null;
-  let textureA = null;
-  let textureB = null;
-  let size = null;
-  let framebuffer = null;
-  let depthBuffer = null;
-  let enable = false;
-  let unit = 0;
-
-  function configureTexture(gl, texture, blank) {
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    const level = 0,
-          border = 0,
-          data = blank ? new Uint8Array(4) : null;
-    gl.texImage2D(gl.TEXTURE_2D, level, gl.RGBA, blank ? 1 : size[0], blank ? 1 : size[1], border, gl.RGBA, gl.UNSIGNED_BYTE, data);
-  }
-
-  const pingPongTexture = programBuilder => {
-    const gl = programBuilder.context();
-
-    if (textureA == null) {
-      textureA = gl.createTexture();
-    }
-
-    if (textureB == null) {
-      textureB = gl.createTexture();
-    }
-
-    if (framebuffer == null) {
-      framebuffer = gl.createFramebuffer();
-    }
-
-    if (depthBuffer == null) {
-      depthBuffer = gl.createRenderbuffer();
-    }
-
-    if (dirty) {
-      configureTexture(gl, textureA, true);
-      configureTexture(gl, textureB, false);
-      gl.bindRenderbuffer(gl.RENDERBUFFER, depthBuffer);
-      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, size[0], size[1]);
-      dirtyTexture = textureA;
-      dirty = false;
-    } else if (dirtyTexture) {
-      configureTexture(gl, dirtyTexture, false);
-      dirtyTexture = null;
-    }
-
-    gl.activeTexture(gl.TEXTURE0 + unit);
-    gl.bindTexture(gl.TEXTURE_2D, textureA);
-    gl.uniform1i(location, unit);
-    gl.viewport(0, 0, enable ? size[0] : gl.canvas.width, enable ? size[1] : gl.canvas.height);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, enable ? framebuffer : null);
-    gl.bindRenderbuffer(gl.RENDERBUFFER, enable ? depthBuffer : null);
-
-    if (enable) {
-      const level = 0;
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, textureB, level);
-      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthBuffer);
-      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // swap the buffers
-
-      const temp = textureA;
-      textureA = textureB;
-      textureB = temp;
-    }
-  };
-
-  pingPongTexture.clear = () => {
-    dirty = true;
-    textureA = null;
-    textureB = null;
-    framebuffer = null;
-  };
-
-  pingPongTexture.location = (...args) => {
-    if (!args.length) {
-      return location;
-    }
-
-    location = args[0];
-    return pingPongTexture;
-  };
-
-  pingPongTexture.size = (...args) => {
-    if (!args.length) {
-      return size;
-    }
-
-    if (size !== args[0]) {
-      size = args[0];
-      dirty = true;
-    }
-
-    return pingPongTexture;
-  };
-
-  pingPongTexture.enable = (...args) => {
-    if (!args.length) {
-      return enable;
-    }
-
-    if (enable !== args[0]) {
-      enable = args[0];
-    }
-
-    return pingPongTexture;
-  };
-
-  pingPongTexture.unit = (...args) => {
-    if (!args.length) {
-      return unit;
-    }
-
-    unit = args[0];
-    return pingPongTexture;
-  };
-
-  return pingPongTexture;
-};
-
-exports.default = _default;
-},{}],"node_modules/@d3fc/d3fc-webgl/src/buffer/arrayViewFactory.js":[function(require,module,exports) {
-"use strict";
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-exports.default = void 0;
-
-var _types = _interopRequireWildcard(require("./types"));
-
-function _getRequireWildcardCache(nodeInterop) { if (typeof WeakMap !== "function") return null; var cacheBabelInterop = new WeakMap(); var cacheNodeInterop = new WeakMap(); return (_getRequireWildcardCache = function (nodeInterop) { return nodeInterop ? cacheNodeInterop : cacheBabelInterop; })(nodeInterop); }
-
-function _interopRequireWildcard(obj, nodeInterop) { if (!nodeInterop && obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { default: obj }; } var cache = _getRequireWildcardCache(nodeInterop); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (key !== "default" && Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj.default = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
-
-var _default = () => {
-  let type = _types.default.FLOAT;
-  let cachedArray = new Float32Array(0);
-
-  const factory = requiredLength => {
-    const ArrayType = (0, _types.getArrayViewConstructor)(type);
-
-    if (cachedArray.length > requiredLength) {
-      cachedArray = new ArrayType(cachedArray.buffer, 0, requiredLength);
-    } else if (cachedArray.length !== requiredLength) {
-      cachedArray = new ArrayType(requiredLength);
-    }
-
-    return cachedArray;
-  };
-
-  factory.type = (...args) => {
-    if (!args.length) {
-      return type;
-    }
-
-    if (type !== args[0]) {
-      type = args[0];
-      const ArrayType = (0, _types.getArrayViewConstructor)(type);
-      cachedArray = new ArrayType(0);
-    }
-
-    return factory;
-  };
-
-  return factory;
-};
-
-exports.default = _default;
-},{"./types":"node_modules/@d3fc/d3fc-webgl/src/buffer/types.js"}],"readTexture.ts":[function(require,module,exports) {
-"use strict";
-
-var __importDefault = this && this.__importDefault || function (mod) {
-  return mod && mod.__esModule ? mod : {
-    "default": mod
-  };
-};
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-
-var d3fc_1 = require("d3fc");
-
-var arrayViewFactory_1 = __importDefault(require("@d3fc/d3fc-webgl/src/buffer/arrayViewFactory"));
-
-var vertexShader = function () {
-  return "\nprecision mediump float;\n\nuniform float uCount;\nuniform vec2 uCanvasSize;\nattribute vec2 aVertex;\n\nvoid main() {\n    vec4 position = vec4(aVertex.xy, 0.0, 1.0);\n    if (position.y == 1.0) {\n        position.y = ceil(uCount / uCanvasSize[0]) / uCanvasSize[1];\n        position.y = position.y * 2.0 - 1.0;\n    }\n    // This is non-optimal if uCount < uCanvasSize -\n    // position.x could be trimmed in a similar manner\n    gl_Position = position;\n}\n";
-};
-
-var fragmentShader = function () {
-  return "\nprecision mediump float;\n\nuniform sampler2D uTexture;\nuniform vec2 uTextureSize;\nuniform vec2 uCanvasSize;\n\nvoid main() {\n    float index = (gl_FragCoord.y - 0.5) * uCanvasSize[0] + (gl_FragCoord.x - 0.5) / uCanvasSize[0];\n    vec2 coord = vec2(mod(index, uTextureSize[0]), floor(index / uTextureSize[0]));\n    gl_FragColor = texture2D(uTexture, coord);\n}\n";
-};
-
-exports.default = function () {
-  var programBuilder = (0, d3fc_1.webglProgramBuilder)().fragmentShader(fragmentShader).vertexShader(vertexShader);
-  programBuilder.buffers().attribute('aVertex', (0, d3fc_1.webglAttribute)().size(2).data([[-1, -1], [1, 1], [-1, 1], [-1, -1], [1, 1], [1, -1]]));
-  var texture = null;
-  var size = null;
-  var arrayViewFactory = (0, arrayViewFactory_1.default)();
-
-  var readTexture = function (count) {
-    var gl = programBuilder.context();
-    var array = arrayViewFactory.type(gl.UNSIGNED_BYTE)(count * 4);
-
-    if (count == null || count > size[0] * size[1]) {
-      throw new Error('Invalid length');
-    }
-
-    if (gl.canvas.width * gl.canvas.height < count) {
-      throw new Error('Texture too large to extract in one pass');
-    }
-
-    programBuilder.buffers().uniform('uTexture', texture).uniform('uCanvasSize', (0, d3fc_1.webglUniform)([gl.canvas.width, gl.canvas.height])).uniform('uTextureSize', (0, d3fc_1.webglUniform)(size)).uniform('uCount', (0, d3fc_1.webglUniform)([count]));
-    programBuilder(6);
-
-    for (var offset = 0; offset < count; offset += gl.canvas.width) {
-      // This is non-optimal if length >= context.canvas.width * 2 -
-      // reading 2 rectangles (one large of n rows and 1 partial row) 
-      // would be more efficient
-      gl.readPixels(0, 0, Math.min(count - offset, gl.canvas.width), 1, gl.RGBA, gl.UNSIGNED_BYTE, array.subarray(offset));
-    }
-
-    return array;
-  };
-
-  readTexture.texture = function () {
-    var args = [];
-
-    for (var _i = 0; _i < arguments.length; _i++) {
-      args[_i] = arguments[_i];
-    }
-
-    if (!args.length) {
-      return texture;
-    }
-
-    texture = args[0];
-    return readTexture;
-  };
-
-  readTexture.size = function () {
-    var args = [];
-
-    for (var _i = 0; _i < arguments.length; _i++) {
-      args[_i] = arguments[_i];
-    }
-
-    if (!args.length) {
-      return size;
-    }
-
-    size = args[0];
-    return readTexture;
-  };
-
-  readTexture.arrayViewFactory = function () {
-    var args = [];
-
-    for (var _i = 0; _i < arguments.length; _i++) {
-      args[_i] = arguments[_i];
-    }
-
-    if (!args.length) {
-      return arrayViewFactory;
-    }
-
-    arrayViewFactory = args[0];
-    return readTexture;
-  };
-
-  (0, d3fc_1.rebind)(readTexture, programBuilder, 'context');
-  return readTexture;
-};
-},{"d3fc":"node_modules/d3fc/build/d3fc.js","@d3fc/d3fc-webgl/src/buffer/arrayViewFactory":"node_modules/@d3fc/d3fc-webgl/src/buffer/arrayViewFactory.js"}],"node_modules/@d3fc/d3fc-webgl/src/rebindCurry.js":[function(require,module,exports) {
+},{}],"node_modules/@d3fc/d3fc-webgl/src/rebindCurry.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -71970,11 +71687,9 @@ var _d3fc = require("d3fc");
 
 var _drawModes = _interopRequireDefault(require("@d3fc/d3fc-webgl/src/program/drawModes"));
 
-var _pingPongTexture = _interopRequireDefault(require("./pingPongTexture"));
-
-var _readTexture = _interopRequireDefault(require("./readTexture"));
-
 var _rebindCurry = _interopRequireDefault(require("@d3fc/d3fc-webgl/src/rebindCurry"));
+
+var _oneDimensionalTexture = _interopRequireDefault(require("./oneDimensionalTexture"));
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -71983,15 +71698,14 @@ precision mediump float;
 
 uniform vec2 uPoint;
 uniform float uMaxDistance;
-uniform vec2 uViewportSize;
 attribute float aCrossValue;
 attribute float aMainValue;
 attribute vec4 aIndex;
 varying vec4 vFragColor;
 
 void main() {
-    // (0, 0) pixel-aligned and converted to clip-space
-    vec2 coord = (vec2(0, 0) + 0.5) / (uViewportSize[0] / 2.0) - 1.0;
+    // center of texture
+    vec2 coord = vec2(0.5, 0.5);
 
     // distance calculated and converted to [0, 1]
     float distance = min(distance(uPoint, vec2(aCrossValue, aMainValue)), uMaxDistance) / uMaxDistance;
@@ -72014,13 +71728,17 @@ void main() {
 `;
 
 function _default() {
-  const maxDistance = 20;
-  const size = [1, 1];
-  const texture = (0, _pingPongTexture.default)().size(size).unit(0);
+  const UNIT_LENGTH = 1;
+  const texture = (0, _oneDimensionalTexture.default)().data(new Uint8Array(UNIT_LENGTH * 4));
   const pointUniform = (0, _d3fc.webglUniform)();
+  const maxDistanceUniform = (0, _d3fc.webglUniform)();
   const programBuilder = (0, _d3fc.webglProgramBuilder)().fragmentShader(mapFragmentShader).vertexShader(mapVertexShader).mode(_drawModes.default.POINTS);
-  programBuilder.buffers().uniform(`uViewportSize`, (0, _d3fc.webglUniform)(size)).uniform(`uTexture`, texture).uniform(`uPoint`, pointUniform).uniform(`uMaxDistance`, (0, _d3fc.webglUniform)([maxDistance]));
-  const readTexture = (0, _readTexture.default)().texture(texture).size(size);
+  programBuilder.buffers().uniform(`uPoint`, pointUniform).uniform(`uMaxDistance`, maxDistanceUniform);
+  let previousContext = null;
+  let frameBuffer = null;
+  let depthBuffer = null;
+  let unit = null;
+  let maxDistance = 1;
   let point = null;
   let read = null;
 
@@ -72028,29 +71746,56 @@ function _default() {
     var _point, _point2;
 
     const context = programBuilder.context();
-    programBuilder.context(context);
-    readTexture.context(context);
-    pointUniform.data([(_point = point) === null || _point === void 0 ? void 0 : _point.x, (_point2 = point) === null || _point2 === void 0 ? void 0 : _point2.y]);
-    texture.enable(true);
-    context.disable(context.BLEND);
-    context.enable(context.DEPTH_TEST);
-    context.depthFunc(context.LESS);
-    programBuilder(data.length);
-    context.disable(context.DEPTH_TEST);
-    texture.enable(false);
+
+    if (context !== previousContext) {
+      // context new or restored - regenerate all gl references
+      frameBuffer = context.createFramebuffer();
+      depthBuffer = context.createRenderbuffer();
+      context.bindRenderbuffer(context.RENDERBUFFER, depthBuffer);
+      context.renderbufferStorage(context.RENDERBUFFER, context.DEPTH_COMPONENT16, UNIT_LENGTH, UNIT_LENGTH);
+      previousContext = context;
+    }
+
+    maxDistanceUniform.data([maxDistance]);
+    pointUniform.data([(_point = point) === null || _point === void 0 ? void 0 : _point.x, (_point2 = point) === null || _point2 === void 0 ? void 0 : _point2.y]); // configure the context - custom frameBuffer, depthBuffer, viewport, etc.
+
+    {
+      context.viewport(0, 0, UNIT_LENGTH, UNIT_LENGTH);
+      texture.location(null);
+      const glTexture = texture(programBuilder);
+      context.bindFramebuffer(context.FRAMEBUFFER, frameBuffer);
+      const level = 0;
+      context.framebufferTexture2D(context.FRAMEBUFFER, context.COLOR_ATTACHMENT0, context.TEXTURE_2D, glTexture, level);
+      context.bindRenderbuffer(context.RENDERBUFFER, depthBuffer);
+      context.framebufferRenderbuffer(context.FRAMEBUFFER, context.DEPTH_ATTACHMENT, context.RENDERBUFFER, depthBuffer);
+      context.clear(context.DEPTH_BUFFER_BIT);
+      context.enable(context.DEPTH_TEST);
+      context.depthFunc(context.LESS);
+    } // run the calculation
+
+    programBuilder(data.length); // optionally read back the result
 
     if (read) {
-      const pixels = readTexture(1);
+      const pixels = new Uint8Array(4);
+      context.readPixels(0, 0, UNIT_LENGTH, UNIT_LENGTH, context.RGBA, context.UNSIGNED_BYTE, pixels);
       const index = pixels[2] << 16 | pixels[1] << 8 | pixels[0];
       const distance = pixels[3] / 256 * maxDistance;
       read({
         index,
         distance
       });
+    } // reset the context
+
+
+    {
+      context.disable(context.DEPTH_TEST);
+      context.viewport(0, 0, context.canvas.width, context.canvas.height);
+      context.bindFramebuffer(context.FRAMEBUFFER, null);
+      context.bindRenderbuffer(context.RENDERBUFFER, null);
     }
   };
 
-  closestPoint.texture = texture;
+  closestPoint.texture = () => texture;
 
   closestPoint.xScale = (...args) => {
     let xScale;
@@ -72074,6 +71819,15 @@ function _default() {
     return closestPoint;
   };
 
+  closestPoint.maxDistance = (...args) => {
+    if (!args.length) {
+      return maxDistance;
+    }
+
+    maxDistance = args[0];
+    return closestPoint;
+  };
+
   closestPoint.point = (...args) => {
     if (!args.length) {
       return point;
@@ -72092,14 +71846,22 @@ function _default() {
     return closestPoint;
   };
 
+  closestPoint.unit = (...args) => {
+    if (!args.length) {
+      return unit;
+    }
+
+    unit = args[0];
+    return closestPoint;
+  };
+
   (0, _d3fc.rebind)(closestPoint, programBuilder, 'context', 'pixelRatio');
-  (0, _d3fc.rebind)(closestPoint, texture, 'unit');
   (0, _rebindCurry.default)(closestPoint, 'mainValueAttribute', programBuilder.buffers(), 'attribute', 'aMainValue');
   (0, _rebindCurry.default)(closestPoint, 'crossValueAttribute', programBuilder.buffers(), 'attribute', 'aCrossValue');
   (0, _rebindCurry.default)(closestPoint, 'indexValueAttribute', programBuilder.buffers(), 'attribute', 'aIndex');
   return closestPoint;
 }
-},{"d3fc":"node_modules/d3fc/build/d3fc.js","@d3fc/d3fc-webgl/src/program/drawModes":"node_modules/@d3fc/d3fc-webgl/src/program/drawModes.js","./pingPongTexture":"pingPongTexture.js","./readTexture":"readTexture.ts","@d3fc/d3fc-webgl/src/rebindCurry":"node_modules/@d3fc/d3fc-webgl/src/rebindCurry.js"}],"data.arrows":[function(require,module,exports) {
+},{"d3fc":"node_modules/d3fc/build/d3fc.js","@d3fc/d3fc-webgl/src/program/drawModes":"node_modules/@d3fc/d3fc-webgl/src/program/drawModes.js","@d3fc/d3fc-webgl/src/rebindCurry":"node_modules/@d3fc/d3fc-webgl/src/rebindCurry.js","./oneDimensionalTexture":"oneDimensionalTexture.js"}],"data.arrows":[function(require,module,exports) {
 module.exports = "/d3fc-webgl-hathi-explorer/data.32a42d27.arrows";
 },{}],"index.js":[function(require,module,exports) {
 "use strict";
@@ -72196,7 +71958,7 @@ const highlightPointSeries = (0, _bespokePointSeries.default)().crossValueAttrib
           }
       `);
   programBuilder.buffers().attribute('aSize').value([100]);
-  programBuilder.buffers().uniform('uTexture', findClosestPoint.texture).attribute('aIndex', indexAttribute);
+  programBuilder.buffers().uniform('uTexture', findClosestPoint.texture()).attribute('aIndex', indexAttribute);
   highlightFillColor(programBuilder);
 });
 
@@ -72331,7 +72093,7 @@ var parent = module.bundle.parent;
 if ((!parent || !parent.isParcelRequire) && typeof WebSocket !== 'undefined') {
   var hostname = "" || location.hostname;
   var protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  var ws = new WebSocket(protocol + '://' + hostname + ':' + "51589" + '/');
+  var ws = new WebSocket(protocol + '://' + hostname + ':' + "52556" + '/');
 
   ws.onmessage = function (event) {
     checkedAssets = {};
