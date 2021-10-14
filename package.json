@@ -3,8 +3,8 @@
   "private": true,
   "description": "A re-implementation of Ben Schmidt's [Deep Scatter Plot](http://creatingdata.us/techne/deep_scatterplots/) of Hathi Trust library books clustered using [T-SNE](https://en.wikipedia.org/wiki/T-distributed_stochastic_neighbor_embedding).",
   "scripts": {
-    "start": "parcel --out-dir docs --public-url /d3fc-webgl-hathi-explorer/ index.html",
-    "build": "rm -rf docs && parcel build --out-dir docs --public-url /d3fc-webgl-hathi-explorer/ index.html"
+    "start": "esbuild index.js --bundle --loader:.arrows=file --outdir=docs/bundle --public-path=/bundle --servedir=docs",
+    "build": "esbuild index.js --bundle --loader:.arrows=file --outdir=docs/bundle --public-path=/d3fc-webgl-hathi-explorer/bundle --minify"
   },
   "author": "Chris Price",
   "license": "ISC",
@@ -17,7 +17,10 @@
   },
   "devDependencies": {
     "@types/d3": "^7.0.0",
-    "parcel-bundler": "^1.12.5"
+    "esbuild": "^0.13.6"
+  },
+  "browser": {
+    "apache-arrow": "./node_modules/apache-arrow/Arrow.dom.mjs"
   },
   "browserslist": "last 1 Chrome versions"
 }

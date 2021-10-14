@@ -2,7 +2,7 @@ import { seriesSvgAnnotation } from './annotationSeries.js';
 
 import * as d3 from 'd3';
 import * as fc from 'd3fc';
-import * as Arrow from 'apache-arrow/Arrow';
+import * as Arrow from 'apache-arrow';
 import bespokePointSeries from './bespokePointSeries';
 import streamingAttribute from './streamingAttribute';
 import indexedFillColor from './indexedFillColor';
