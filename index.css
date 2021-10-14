@@ -1,4 +1,6 @@
-@import "tailwindcss/dist/tailwind";
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
 
 .annotation-note-bg {
     fill-opacity: 0.6;

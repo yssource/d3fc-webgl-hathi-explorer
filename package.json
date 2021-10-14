@@ -3,8 +3,14 @@
   "private": true,
   "description": "A re-implementation of Ben Schmidt's [Deep Scatter Plot](http://creatingdata.us/techne/deep_scatterplots/) of Hathi Trust library books clustered using [T-SNE](https://en.wikipedia.org/wiki/T-distributed_stochastic_neighbor_embedding).",
   "scripts": {
-    "start": "esbuild index.js index.css --bundle --loader:.arrows=file --outdir=docs/bundle --public-path=/bundle --servedir=docs",
-    "build": "esbuild index.js index.css --bundle --loader:.arrows=file --outdir=docs/bundle --public-path=/d3fc-webgl-hathi-explorer/bundle --minify"
+    "base:css": "tailwindcss --input index.css --output docs/bundle/index.css",
+    "base:js": "esbuild index.js --bundle --loader:.arrows=file --outdir=docs/bundle",
+    "start": "run-p start:css start:js",
+    "start:css": "npm run base:css -- --watch",
+    "start:js": "npm run base:js -- --public-path=/bundle --servedir=docs",
+    "build": "run-s build:css build:js",
+    "build:css": "npm run base:css -- --purge index.js,docs/index.html --minify",
+    "build:js": "npm run base:js -- --public-path=/d3fc-webgl-hathi-explorer/bundle --minify"
   },
   "author": "Chris Price",
   "license": "ISC",
@@ -13,12 +19,13 @@
     "apache-arrow": "^5.0.0",
     "d3": "^7.0.1",
     "d3-svg-annotation": "^2.5.1",
-    "d3fc": "^15.2.4",
-    "tailwindcss": "^2.2.17"
+    "d3fc": "^15.2.4"
   },
   "devDependencies": {
     "@types/d3": "^7.0.0",
-    "esbuild": "^0.13.6"
+    "esbuild": "^0.13.6",
+    "npm-run-all": "^4.1.5",
+    "tailwindcss": "^2.2.17"
   },
   "browser": {
     "apache-arrow": "./node_modules/apache-arrow/Arrow.dom.mjs"
