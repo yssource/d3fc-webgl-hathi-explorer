@@ -20,7 +20,7 @@ export default () => {
     let decorate = (programBuilder, data, index) => { };
 
     const streamingPointSeries = (data) => {
-        sizeAttribute.value([1]);
+        sizeAttribute.value([Math.pow(devicePixelRatio ?? 1, 2)]);
         definedAttribute.value([true]);
 
         // the following assumes there is no d3 scale required

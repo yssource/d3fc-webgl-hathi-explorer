@@ -214,7 +214,10 @@ const pointer = fc.pointer()
   });
 
 const zoom = fc.zoom()
-  .on('zoom', redraw);
+  .on('zoom', () => {
+    data.annotations = [];
+    redraw();
+  });
 
 const chart = fc
   .chartCartesian(xScale, yScale)
