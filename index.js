@@ -300,7 +300,7 @@ if (CLICK_TO_LOAD) {
     document.body.removeEventListener('click', clickHandler);
     loadData();
   };
-  document.body.addEventListener('click', loadData);
+  document.body.addEventListener('click', clickHandler);
   document.querySelector('#loading>span').innerHTML = 'Click to load data';
 } else {
   loadData();
