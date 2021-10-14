@@ -1,3 +1,4 @@
+import * as d3 from 'd3';
 import { rebind, webglProgramBuilder, webglUniform } from 'd3fc';
 import drawModes from '@d3fc/d3fc-webgl/src/program/drawModes';
 import rebindCurry from '@d3fc/d3fc-webgl/src/rebindCurry';
@@ -14,14 +15,12 @@ attribute vec4 aIndex;
 varying vec4 vFragColor;
 
 void main() {
-    // center of texture
-    vec2 coord = vec2(0.5, 0.5);
-
     // distance calculated and converted to [0, 1]
     float distance = min(distance(uPoint, vec2(aCrossValue, aMainValue)), uMaxDistance) / uMaxDistance;
+    
+    gl_Position = vec4(0.5, 0.5, distance, 1.0);
 
     gl_PointSize = 1.0;
-    gl_Position = vec4(coord.x, coord.y, distance, 1.0);
 
     vFragColor = vec4(aIndex[0], aIndex[1], aIndex[2], distance);
 }
@@ -39,6 +38,7 @@ void main() {
 
 export default function () {
     const UNIT_LENGTH = 1;
+    const dispatch = d3.dispatch('read');
     const texture = oneDimensionalTexture()
         .data(new Uint8Array(UNIT_LENGTH * 4));
     const pointUniform = webglUniform();
@@ -59,9 +59,14 @@ export default function () {
 
     let maxDistance = 1;
     let point = null;
-    let read = null;
+    let read = false;
 
     const closestPoint = function (data) {
+        // handle edge case
+        if (data.length < 1) {
+            return;
+        }
+
         const context = programBuilder.context();
 
         if (context !== previousContext) {
@@ -124,7 +129,7 @@ export default function () {
             );
             const index = pixels[2] << 16 | pixels[1] << 8 | pixels[0];
             const distance = (pixels[3] / 256) * maxDistance;
-            read({ index, distance });
+            dispatch.call('read', closestPoint, { index, distance });
         }
 
         // reset the context
@@ -188,6 +193,7 @@ export default function () {
         return closestPoint;
     };
 
+    rebind(closestPoint, dispatch, 'on');
     rebind(closestPoint, programBuilder, 'context', 'pixelRatio');
     rebindCurry(
         closestPoint,

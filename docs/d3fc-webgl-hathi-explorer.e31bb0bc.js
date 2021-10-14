@@ -71683,6 +71683,8 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.default = _default;
 
+var d3 = _interopRequireWildcard(require("d3"));
+
 var _d3fc = require("d3fc");
 
 var _drawModes = _interopRequireDefault(require("@d3fc/d3fc-webgl/src/program/drawModes"));
@@ -71692,6 +71694,10 @@ var _rebindCurry = _interopRequireDefault(require("@d3fc/d3fc-webgl/src/rebindCu
 var _oneDimensionalTexture = _interopRequireDefault(require("./oneDimensionalTexture"));
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function _getRequireWildcardCache(nodeInterop) { if (typeof WeakMap !== "function") return null; var cacheBabelInterop = new WeakMap(); var cacheNodeInterop = new WeakMap(); return (_getRequireWildcardCache = function (nodeInterop) { return nodeInterop ? cacheNodeInterop : cacheBabelInterop; })(nodeInterop); }
+
+function _interopRequireWildcard(obj, nodeInterop) { if (!nodeInterop && obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { default: obj }; } var cache = _getRequireWildcardCache(nodeInterop); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (key !== "default" && Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj.default = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
 
 const mapVertexShader = () => `
 precision mediump float;
@@ -71704,14 +71710,12 @@ attribute vec4 aIndex;
 varying vec4 vFragColor;
 
 void main() {
-    // center of texture
-    vec2 coord = vec2(0.5, 0.5);
-
     // distance calculated and converted to [0, 1]
     float distance = min(distance(uPoint, vec2(aCrossValue, aMainValue)), uMaxDistance) / uMaxDistance;
+    
+    gl_Position = vec4(0.5, 0.5, distance, 1.0);
 
     gl_PointSize = 1.0;
-    gl_Position = vec4(coord.x, coord.y, distance, 1.0);
 
     vFragColor = vec4(aIndex[0], aIndex[1], aIndex[2], distance);
 }
@@ -71729,6 +71733,7 @@ void main() {
 
 function _default() {
   const UNIT_LENGTH = 1;
+  const dispatch = d3.dispatch('read');
   const texture = (0, _oneDimensionalTexture.default)().data(new Uint8Array(UNIT_LENGTH * 4));
   const pointUniform = (0, _d3fc.webglUniform)();
   const maxDistanceUniform = (0, _d3fc.webglUniform)();
@@ -71740,10 +71745,15 @@ function _default() {
   let unit = null;
   let maxDistance = 1;
   let point = null;
-  let read = null;
+  let read = false;
 
   const closestPoint = function (data) {
     var _point, _point2;
+
+    // handle edge case
+    if (data.length < 1) {
+      return;
+    }
 
     const context = programBuilder.context();
 
@@ -71780,7 +71790,7 @@ function _default() {
       context.readPixels(0, 0, UNIT_LENGTH, UNIT_LENGTH, context.RGBA, context.UNSIGNED_BYTE, pixels);
       const index = pixels[2] << 16 | pixels[1] << 8 | pixels[0];
       const distance = pixels[3] / 256 * maxDistance;
-      read({
+      dispatch.call('read', closestPoint, {
         index,
         distance
       });
@@ -71855,13 +71865,14 @@ function _default() {
     return closestPoint;
   };
 
+  (0, _d3fc.rebind)(closestPoint, dispatch, 'on');
   (0, _d3fc.rebind)(closestPoint, programBuilder, 'context', 'pixelRatio');
   (0, _rebindCurry.default)(closestPoint, 'mainValueAttribute', programBuilder.buffers(), 'attribute', 'aMainValue');
   (0, _rebindCurry.default)(closestPoint, 'crossValueAttribute', programBuilder.buffers(), 'attribute', 'aCrossValue');
   (0, _rebindCurry.default)(closestPoint, 'indexValueAttribute', programBuilder.buffers(), 'attribute', 'aIndex');
   return closestPoint;
 }
-},{"d3fc":"node_modules/d3fc/build/d3fc.js","@d3fc/d3fc-webgl/src/program/drawModes":"node_modules/@d3fc/d3fc-webgl/src/program/drawModes.js","@d3fc/d3fc-webgl/src/rebindCurry":"node_modules/@d3fc/d3fc-webgl/src/rebindCurry.js","./oneDimensionalTexture":"oneDimensionalTexture.js"}],"data.arrows":[function(require,module,exports) {
+},{"d3":"node_modules/d3/src/index.js","d3fc":"node_modules/d3fc/build/d3fc.js","@d3fc/d3fc-webgl/src/program/drawModes":"node_modules/@d3fc/d3fc-webgl/src/program/drawModes.js","@d3fc/d3fc-webgl/src/rebindCurry":"node_modules/@d3fc/d3fc-webgl/src/rebindCurry.js","./oneDimensionalTexture":"oneDimensionalTexture.js"}],"data.arrows":[function(require,module,exports) {
 module.exports = "/d3fc-webgl-hathi-explorer/data.32a42d27.arrows";
 },{}],"index.js":[function(require,module,exports) {
 "use strict";
@@ -71895,10 +71906,8 @@ const MAX_BUFFER_SIZE = 4e6; // 1M values * 4 byte value width
 const columnValues = (table, columnName) => {
   const index = table.getColumnIndex(columnName);
   return table.chunks.filter(chunk => chunk.length > 0).map(chunk => chunk.data.childData[index].values);
-}; // sentinel value for signaling a read from WebGL is required
+};
 
-
-const PENDING_READ = [];
 const data = {
   pointers: [],
   annotations: [],
@@ -71939,11 +71948,28 @@ const yScale = d3.scaleLinear().domain([-50, 50]);
 const indexAttribute = (0, _streamingAttribute.default)().maxByteLength(MAX_BUFFER_SIZE).type(fc.webglTypes.UNSIGNED_BYTE).size(4).normalized(true);
 const crossValueAttribute = (0, _streamingAttribute.default)().maxByteLength(MAX_BUFFER_SIZE);
 const mainValueAttribute = (0, _streamingAttribute.default)().maxByteLength(MAX_BUFFER_SIZE);
-const findClosestPoint = (0, _closestPoint.default)().crossValueAttribute(crossValueAttribute).mainValueAttribute(mainValueAttribute).indexValueAttribute(indexAttribute).unit(CLOSEST_POINT_TEXTURE_UNIT);
 const pointSeries = (0, _bespokePointSeries.default)().crossValueAttribute(crossValueAttribute).mainValueAttribute(mainValueAttribute).decorate(programBuilder => {
   const gl = programBuilder.context();
   gl.disable(gl.BLEND);
   fillColor(programBuilder);
+});
+const findClosestPoint = (0, _closestPoint.default)().crossValueAttribute(crossValueAttribute).mainValueAttribute(mainValueAttribute).indexValueAttribute(indexAttribute).unit(CLOSEST_POINT_TEXTURE_UNIT).on('read', ({
+  index
+}) => {
+  const currentPoint = data.pointers[0];
+  findClosestPoint.point(currentPoint); // ensure the read is not for a stale point
+
+  const previousPoint = findClosestPoint.point();
+
+  if ((previousPoint === null || previousPoint === void 0 ? void 0 : previousPoint.x) !== (currentPoint === null || currentPoint === void 0 ? void 0 : currentPoint.x) || (previousPoint === null || previousPoint === void 0 ? void 0 : previousPoint.y) !== (currentPoint === null || currentPoint === void 0 ? void 0 : currentPoint.y)) {
+    return;
+  } // create an annotation for the read value
+
+
+  data.annotations = [createAnnotationData(data.table.get(index))]; // disable further reads
+
+  findClosestPoint.read(false); // no need to schedule a redraw because the SVG 
+  // series are rendered after the WebGL series
 });
 const highlightFillColor = fc.webglFillColor([0.3, 0.3, 0.3, 0.6]);
 const highlightPointSeries = (0, _bespokePointSeries.default)().crossValueAttribute(crossValueAttribute).mainValueAttribute(mainValueAttribute).decorate(programBuilder => {
@@ -72003,7 +72029,7 @@ const pointer = fc.pointer().on('point', pointers => {
   // from WebGL
 
   debounceTimer = setTimeout(() => {
-    data.annotations = PENDING_READ;
+    findClosestPoint.read(true);
     redraw();
   }, 100);
   redraw();
@@ -72013,26 +72039,8 @@ const chart = fc.chartCartesian(xScale, yScale).webglPlotArea( // only render th
 fc.seriesWebglMulti().series([pointSeries, findClosestPoint, highlightPointSeries]).mapping(d => d.table)).svgPlotArea( // only render the annotations series on the SVG layer
 fc.seriesSvgMulti().series([annotationSeries]).mapping(d => d.annotations)).decorate(sel => {
   sel.enter().select('.svg-plot-area').call(zoom, xScale, yScale).call(pointer);
-});
-
-const readClosestPoint = ({
-  index
-}) => {
-  const currentPoint = data.pointers[0];
-  findClosestPoint.point(currentPoint); // ensure the read is not for a stale point
-
-  const previousPoint = findClosestPoint.point();
-
-  if ((previousPoint === null || previousPoint === void 0 ? void 0 : previousPoint.x) !== (currentPoint === null || currentPoint === void 0 ? void 0 : currentPoint.x) || (previousPoint === null || previousPoint === void 0 ? void 0 : previousPoint.y) !== (currentPoint === null || currentPoint === void 0 ? void 0 : currentPoint.y)) {
-    return;
-  } // create an annotation for the read value
-
-
-  data.annotations = [createAnnotationData(data.table.get(index))]; // no need to schedule a redraw because the SVG 
-  // series are rendered after the WebGL series
-}; // render the chart with the required data
-// Enqueues a redraw to occur on the next animation frame
-
+}); // render the chart with the required data
+// enqueues a redraw to occur on the next animation frame
 
 function redraw() {
   // using raw attributes means we need to explicitly pass the data in
@@ -72041,11 +72049,6 @@ function redraw() {
   languageAttribute.data(columnValues(data.table, 'language'));
   yearAttribute.data(columnValues(data.table, 'date'));
   indexAttribute.data(columnValues(data.table, 'ix'));
-
-  if (data.table.length > 0) {
-    findClosestPoint.read(data.annotations === PENDING_READ ? readClosestPoint : null);
-  }
-
   d3.select('#chart').datum(data).call(chart);
 } // stream the data
 

@@ -18,9 +18,6 @@ const columnValues = (table, columnName) => {
     .map(chunk => chunk.data.childData[index].values);
 };
 
-// sentinel value for signaling a read from WebGL is required
-const PENDING_READ = [];
-
 const data = {
   pointers: [],
   annotations: [],
@@ -95,12 +92,6 @@ const crossValueAttribute = streamingAttribute()
 const mainValueAttribute = streamingAttribute()
   .maxByteLength(MAX_BUFFER_SIZE);
 
-const findClosestPoint = closestPoint()
-  .crossValueAttribute(crossValueAttribute)
-  .mainValueAttribute(mainValueAttribute)
-  .indexValueAttribute(indexAttribute)
-  .unit(CLOSEST_POINT_TEXTURE_UNIT);
-
 const pointSeries = bespokePointSeries()
   .crossValueAttribute(crossValueAttribute)
   .mainValueAttribute(mainValueAttribute)
@@ -109,6 +100,36 @@ const pointSeries = bespokePointSeries()
     gl.disable(gl.BLEND);
 
     fillColor(programBuilder);
+  });
+
+const findClosestPoint = closestPoint()
+  .crossValueAttribute(crossValueAttribute)
+  .mainValueAttribute(mainValueAttribute)
+  .indexValueAttribute(indexAttribute)
+  .unit(CLOSEST_POINT_TEXTURE_UNIT)
+  .on('read', ({ index }) => {
+    const currentPoint = data.pointers[0];
+    findClosestPoint.point(currentPoint);
+
+    // ensure the read is not for a stale point
+    const previousPoint = findClosestPoint.point();
+    if (
+      previousPoint?.x !== currentPoint?.x ||
+      previousPoint?.y !== currentPoint?.y
+    ) {
+      return;
+    }
+
+    // create an annotation for the read value
+    data.annotations = [
+      createAnnotationData(data.table.get(index))
+    ];
+
+    // disable further reads
+    findClosestPoint.read(false);
+
+    // no need to schedule a redraw because the SVG 
+    // series are rendered after the WebGL series
   });
 
 const highlightFillColor = fc.webglFillColor([0.3, 0.3, 0.3, 0.6]);
@@ -136,7 +157,6 @@ const highlightPointSeries = bespokePointSeries()
       .attribute('aIndex', indexAttribute);
     highlightFillColor(programBuilder);
   });
-
 
 const createAnnotationData = row => ({
   ix: row.getValue(row.getIndex('ix')),
@@ -186,7 +206,7 @@ const pointer = fc.pointer()
     // schedule a read of the closest data point back
     // from WebGL
     debounceTimer = setTimeout(() => {
-      data.annotations = PENDING_READ;
+      findClosestPoint.read(true);
       redraw();
     }, 100);
 
@@ -219,30 +239,8 @@ const chart = fc
       .call(pointer);
   });
 
-const readClosestPoint = ({ index }) => {
-  const currentPoint = data.pointers[0];
-  findClosestPoint.point(currentPoint);
-
-  // ensure the read is not for a stale point
-  const previousPoint = findClosestPoint.point();
-  if (
-    previousPoint?.x !== currentPoint?.x ||
-    previousPoint?.y !== currentPoint?.y
-  ) {
-    return;
-  }
-
-  // create an annotation for the read value
-  data.annotations = [
-    createAnnotationData(data.table.get(index))
-  ];
-
-  // no need to schedule a redraw because the SVG 
-  // series are rendered after the WebGL series
-};
-
 // render the chart with the required data
-// Enqueues a redraw to occur on the next animation frame
+// enqueues a redraw to occur on the next animation frame
 function redraw() {
   // using raw attributes means we need to explicitly pass the data in
   crossValueAttribute.data(columnValues(data.table, 'x'));
@@ -250,10 +248,6 @@ function redraw() {
   languageAttribute.data(columnValues(data.table, 'language'));
   yearAttribute.data(columnValues(data.table, 'date'));
   indexAttribute.data(columnValues(data.table, 'ix'));
-
-  if (data.table.length > 0) {
-    findClosestPoint.read(data.annotations === PENDING_READ ? readClosestPoint : null);
-  }
 
   d3.select('#chart')
     .datum(data)
