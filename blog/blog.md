@@ -239,14 +239,15 @@ Note that the poor quality, jankiness, etc. is not reflective of the quality, it
 There's an officially supported [Arrow JavaScript library](https://arrow.apache.org/docs/js/) which makes it trivial to consume Arrow files in the browser (`Table.from(response)`). However, to see the data as it is streaming, it's a little bit more involved -
 
 ```js
-import * as Arrow from 'apache-arrow/Arrow';
+import * as Arrow from 'apache-arrow';
 
 import arrowFile from './data.arrows';
 
 const data = {
-  table: Arrow.Table.empty(),
-  // ...
+  table: Arrow.Table.empty()
 };
+
+// ...
 
 const loadData = async () => {
   const response = await fetch(arrowFile);
@@ -290,7 +291,7 @@ To render the data, we need to load all of the data for a given `Field` into a W
 
 The following code using d3fc as per the original example but most of the concepts are generally applicable. First, we create a new component to represent this custom attribute type -
 
-```ts
+```js
 import { rebind, webglBaseAttribute } from 'd3fc';
 
 type TypedArray = Int8Array | Uint8Array | Int16Array | Uint16Array | Int32Array | Uint32Array | Uint8ClampedArray | Float32Array | Float64Array;
@@ -340,7 +341,7 @@ If you've ever created a custom component in D3, the above patterns should hopef
 
 Now let's extend this to load the data -
 
-```ts
+```js
     const streamingAttribute: any = programBuilder => {
         // ...
         gl.bindBuffer(gl.ARRAY_BUFFER, base.buffer());
@@ -363,7 +364,7 @@ This would work fine to load all the data. However, it would reload the data on 
 
 A naive approach would be to take a copy of the data as it is loaded and dirty check each value. However, this would requiring a lot of processing and defeat almost everything we've achieved so far. Instead, I implemented dirty-checking using reference equality on the `TypedArray`s within `data` -
 
-```ts
+```js
     // ...
     let previousData: TypedArray[] = null;
 
@@ -413,24 +414,21 @@ N.B. the above implementation permits the buffer to contain stale data beyond th
 
 To make use of this new attribute we need two further things -
 
-* A point series which is able to use the attribute. `seriesWebglPoint` is restricted to using `webglAttribute`. Working around this is just a case of copy-pasting the implementation, removing the unnecessary configurability and exposing the ability to set the attributes we need. Despite being a simple task, the code is pretty verbose so I've opted to [link to it](https://github.com/chrisprice/d3fc-webgl-hathi-explorer/blob/master/optimisedPointSeries.ts) rather than include it here.
-* A lightweight way to extract the array of `TypedArray`s we need to pass in to the attribute. The important thing here is that we need this to be fast as it runs every frame and we always need it to return the same `TypedArray` references, so as not to inadvertently trip the dirty checks.
+* A point series which is able to use the attribute: [`bespokePointSeries`](https://github.com/chrisprice/d3fc-webgl-hathi-explorer/blob/master/bespokePointSeries.js). Out of the box `seriesWebglPoint` encapsulates this detail. To gain access to the attributes we create our own version using the same underlying components.
+* A lightweight way to extract the array of `TypedArray`s we need to pass in to the attribute: `columnValues` (see implementation below). The important thing here is that we need this to be fast (as it runs every frame) and we always need it to return the same `TypedArray` references (so as not to inadvertently trip the dirty checks).
 
 Bringing this all together, gives us the following -
 
-```ts
-const VALUE_BUFFER_SIZE = 4e6; // 1M values * 4 byte value width
+```js
+import * as d3 from 'd3';
+import * as fc from 'd3fc';
+import * as Arrow from 'apache-arrow';
+import bespokePointSeries from './bespokePointSeries';
+import streamingAttribute from './streamingAttribute';
 
-// ...
+import arrowFile from './data.arrows';
 
-const crossValueAttribute = streamingAttribute()
-  .maxByteLength(VALUE_BUFFER_SIZE);
-const mainValueAttribute = streamingAttribute()
-  .maxByteLength(VALUE_BUFFER_SIZE);
-
-const pointSeries = bespokePointSeries()
-    .crossValueAttribute(crossValueAttribute)
-    .mainValueAttribute(mainValueAttribute);
+const MAX_BUFFER_SIZE = 4e6; // 1M values * 4 byte value width
 
 const columnValues = (table, columnName) => {
   const index = table.getColumnIndex(columnName);
@@ -438,24 +436,77 @@ const columnValues = (table, columnName) => {
     .map(chunk => chunk.data.childData[index].values);
 };
 
-// ...
+const data = {
+  table: Arrow.Table.empty()
+};
 
-const chart = fc.chartCartesian(xScale, yScale)
-    // ...
-    .webglPlotArea(pointSeries)
-    // ...
+const xScale = d3.scaleLinear().domain([-50, 50]);
+const yScale = d3.scaleLinear().domain([-50, 50]);
 
+const crossValueAttribute = streamingAttribute()
+  .maxByteLength(MAX_BUFFER_SIZE);
+const mainValueAttribute = streamingAttribute()
+  .maxByteLength(MAX_BUFFER_SIZE);
+
+const pointSeries = bespokePointSeries()
+  .crossValueAttribute(crossValueAttribute)
+  .mainValueAttribute(mainValueAttribute);
+
+const zoom = fc.zoom()
+  .on('zoom', () => {
+    redraw();
+  });
+
+const chart = fc
+  .chartCartesian(xScale, yScale)
+  .webglPlotArea(
+    // only render the point series on the WebGL layer
+    fc
+      .seriesWebglMulti()
+      .series([pointSeries])
+      .mapping(d => d.table)
+  )
+  .svgPlotArea(
+    // only render the annotations series on the SVG layer
+    fc
+      .seriesSvgMulti()
+      .series([])
+  )
+  .decorate(sel => {
+    sel.enter()
+      .select('.svg-plot-area')
+      .call(zoom, xScale, yScale);
+  });
+
+// render the chart with the required data
+// enqueues a redraw to occur on the next animation frame
 function redraw() {
+  // using raw attributes means we need to explicitly pass the data in
   crossValueAttribute.data(columnValues(data.table, 'x'));
   mainValueAttribute.data(columnValues(data.table, 'y'));
-  
-  // ...
 
   d3.select('#chart')
     .datum(data)
     .call(chart);
+
 }
 
+// stream the data
+const loadData = async () => {
+  const response = await fetch(arrowFile);
+  const reader = await Arrow.RecordBatchReader.from(response);
+  await reader.open();
+  data.table = new Arrow.Table(reader.schema);
+  for await (const recordBatch of reader) {
+    data.table = data.table.concat(recordBatch);
+    document.querySelector('#loading>span').innerHTML =
+      new Intl.NumberFormat().format(data.table.length) + ' points loaded';
+    redraw();
+  }
+};
+
+redraw();
+loadData();
 ```
 
 And here's a version of the above running (as the data file is so large, click to load the demo) -

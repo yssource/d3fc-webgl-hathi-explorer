@@ -10,7 +10,8 @@ import closestPoint from './closestPoint';
 
 import arrowFile from './data.arrows';
 
-import './index.css';
+const LO_FI_VERSION = location.hash.indexOf('lofi') > -1;
+const CLICK_TO_LOAD = location.hash.indexOf('ctl') > -1;
 
 const MAX_BUFFER_SIZE = 4e6; // 1M values * 4 byte value width
 
@@ -68,18 +69,24 @@ const yearFill = indexedFillColor()
 
 let fillColor = yearFill;
 
-const ACTIVE_CLASS = 'text-red-600';
+const DISABLED_CLASSES = 'text-gray-600 cursor-not-allowed';
+const ACTIVE_CLASSES = 'text-red-600';
 
 // wire up the fill color selector
 for (const el of document.querySelectorAll('button')) {
-  el.addEventListener('click', () => {
-    for (const el2 of document.querySelectorAll('button')) {
-      el2.classList.remove(ACTIVE_CLASS);
-    }
-    el.classList.add(ACTIVE_CLASS);
-    fillColor = el.id === 'language' ? languageFill : yearFill;
-    redraw();
-  });
+  if (LO_FI_VERSION) {
+    el.classList.remove(...ACTIVE_CLASSES.split(' '));
+    el.classList.add(...DISABLED_CLASSES.split(' '));
+  } else {
+    el.addEventListener('click', () => {
+      for (const el2 of document.querySelectorAll('button')) {
+        el2.classList.remove(...ACTIVE_CLASSES.split(' '));
+      }
+      el.classList.add(...ACTIVE_CLASSES.split(' '));
+      fillColor = el.id === 'language' ? languageFill : yearFill;
+      redraw();
+    });
+  }
 }
 
 const xScale = d3.scaleLinear().domain([-50, 50]);
@@ -98,13 +105,16 @@ const mainValueAttribute = streamingAttribute()
 
 const pointSeries = bespokePointSeries()
   .crossValueAttribute(crossValueAttribute)
-  .mainValueAttribute(mainValueAttribute)
-  .decorate((programBuilder) => {
+  .mainValueAttribute(mainValueAttribute);
+
+if (!LO_FI_VERSION) {
+  pointSeries.decorate((programBuilder) => {
     const gl = programBuilder.context();
     gl.disable(gl.BLEND);
 
     fillColor(programBuilder);
   });
+}
 
 const findClosestPoint = closestPoint()
   .crossValueAttribute(crossValueAttribute)
@@ -229,7 +239,11 @@ const chart = fc
     // only render the point series on the WebGL layer
     fc
       .seriesWebglMulti()
-      .series([pointSeries, findClosestPoint, highlightPointSeries])
+      .series(
+        LO_FI_VERSION ?
+          [pointSeries] :
+          [pointSeries, findClosestPoint, highlightPointSeries]
+      )
       .mapping(d => d.table)
   )
   .svgPlotArea(
@@ -252,9 +266,11 @@ function redraw() {
   // using raw attributes means we need to explicitly pass the data in
   crossValueAttribute.data(columnValues(data.table, 'x'));
   mainValueAttribute.data(columnValues(data.table, 'y'));
-  languageAttribute.data(columnValues(data.table, 'language'));
-  yearAttribute.data(columnValues(data.table, 'date'));
-  indexAttribute.data(columnValues(data.table, 'ix'));
+  if (!LO_FI_VERSION) {
+    languageAttribute.data(columnValues(data.table, 'language'));
+    yearAttribute.data(columnValues(data.table, 'date'));
+    indexAttribute.data(columnValues(data.table, 'ix'));
+  }
 
   d3.select('#chart')
     .datum(data)
@@ -264,6 +280,7 @@ function redraw() {
 
 // stream the data
 const loadData = async () => {
+  document.querySelector('#loading>span').innerHTML = 'Loading...';
   const response = await fetch(arrowFile);
   const reader = await Arrow.RecordBatchReader.from(response);
   await reader.open();
@@ -277,4 +294,14 @@ const loadData = async () => {
 };
 
 redraw();
-loadData();
+
+if (CLICK_TO_LOAD) {
+  const clickHandler = () => {
+    document.body.removeEventListener('click', clickHandler);
+    loadData();
+  };
+  document.body.addEventListener('click', loadData);
+  document.querySelector('#loading>span').innerHTML = 'Click to load data';
+} else {
+  loadData();
+}
