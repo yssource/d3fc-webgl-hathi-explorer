@@ -2,70 +2,23 @@
 <html>
 
 <head>
-  <style>
-    .annotation-note-bg {
-      fill-opacity: 0.8;
-    }
-
-    .annotation-note-label,
-    .annotation-note-title {
-      fill: black;
-      font-size: 0.8em;
-    }
-
-    body {
-      margin: 1em;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-        Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
-    }
-
-    #chart {
-      position: absolute;
-      top: 0;
-      left: 0;
-      height: 100vh;
-      width: 100vw;
-      z-index: -1;
-    }
-
-    #chart d3fc-group {
-      grid-template-columns: 1em auto 1fr 1em 0;
-      grid-template-rows: 1em auto 1fr 1em 0;
-    }
-
-    .tick text {
-      display: none;
-    }
-
-    a,
-    a:visited,
-    a:active {
-      color: rgb(86, 26, 129);
-      text-decoration: none;
-    }
-
-    a.active,
-    a:hover {
-      text-decoration: underline;
-    }
-  </style>
+  <title>D3FC WebGL Hathi Explorer</title>
+  <link href="bundle/index.css" rel="stylesheet">
 </head>
 
-<body>
-  <div id="title">
-    <div class="subtitle">
-      <h2>Hathi Trust Library</h2>
-      <p>Sourcecode available on
-        <a href="https://github.com/chrisprice/d3fc-webgl-hathi-explorer">GitHub</a></p>
-    </div>
-    <p class="controls">
-      <a href="#" id="language">Language</a> |
-      <a id="year" href="#" class="active">Year</a>
-    </p>
-    <p id="loading"><span>Loading...</span></p>
-  </div>
+<body class="font-mono text-center w-screen h-screen p-4 grid grid-cols-4 gap-2" style="grid-template-rows: min-content minmax(0, 1fr);">
+  <h2>Hathi Trust Library</h2>
+  <p>Source on
+    <a class="text-blue-600 hover:text-blue-700" href="https://github.com/chrisprice/d3fc-webgl-hathi-explorer">GitHub</a>
+  </p>
+  <p class="text-blue-600 hover:text-blue-700">
+    <button id="language" class="">Language</button>
+    <a class="text-black">|</a>
+    <button id="year" class="text-red-600">Year</button>
+  </p>
+  <p id="loading"><span>Loading...</span></p>
 
-  <div id="chart"></div>
+  <div id="chart" class="col-span-4 text-xs"></div>
 
   <script src="bundle/index.js"></script>
 </body>

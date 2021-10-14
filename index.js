@@ -10,6 +10,8 @@ import closestPoint from './closestPoint';
 
 import arrowFile from './data.arrows';
 
+import './index.css';
+
 const MAX_BUFFER_SIZE = 4e6; // 1M values * 4 byte value width
 
 const columnValues = (table, columnName) => {
@@ -66,13 +68,15 @@ const yearFill = indexedFillColor()
 
 let fillColor = yearFill;
 
+const ACTIVE_CLASS = 'text-red-600';
+
 // wire up the fill color selector
-for (const el of document.querySelectorAll('.controls a')) {
+for (const el of document.querySelectorAll('button')) {
   el.addEventListener('click', () => {
-    for (const el2 of document.querySelectorAll('.controls a')) {
-      el2.classList.remove('active');
+    for (const el2 of document.querySelectorAll('button')) {
+      el2.classList.remove(ACTIVE_CLASS);
     }
-    el.classList.add('active');
+    el.classList.add(ACTIVE_CLASS);
     fillColor = el.id === 'language' ? languageFill : yearFill;
     redraw();
   });
