@@ -254,8 +254,9 @@ const chart = fc
       .mapping(d => d.annotations)
   )
   .decorate(sel => {
+    // apply the zoom behaviour to the plot area
     sel.enter()
-      .select('.svg-plot-area')
+      .selectAll('.plot-area')
       .call(zoom, xScale, yScale)
       .call(pointer);
   });
