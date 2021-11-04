@@ -17,10 +17,11 @@ export default () => {
 
     let xScale = scaleIdentity();
     let yScale = scaleIdentity();
+    let size = 1;
     let decorate = (programBuilder, data, index) => { };
 
     const streamingPointSeries = (data) => {
-        sizeAttribute.value([Math.pow(window.devicePixelRatio ?? 1, 2)]);
+        sizeAttribute.value([Math.pow(size * (window.devicePixelRatio ?? 1), 2)]);
         definedAttribute.value([true]);
 
         // the following assumes there is no d3 scale required
@@ -35,6 +36,14 @@ export default () => {
             });
 
         draw(data.length);
+    };
+
+    streamingPointSeries.size = (...args) => {
+        if (!args.length) {
+            return size;
+        }
+        size = args[0];
+        return streamingPointSeries;
     };
 
     streamingPointSeries.xScale = (...args) => {

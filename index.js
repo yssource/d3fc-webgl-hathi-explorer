@@ -273,6 +273,11 @@ function redraw() {
     indexAttribute.data(columnValues(data.table, 'ix'));
   }
 
+  // scale the points as the user zooms, but at a slower rate
+  const scale = (xScale.domain()[1] - xScale.domain()[0]) / 100;
+  const size = 1 / (1 + (scale - 0.9) * 1);
+  pointSeries.size(size);
+
   d3.select('#chart')
     .datum(data)
     .call(chart);

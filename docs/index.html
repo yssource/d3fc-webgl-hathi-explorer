@@ -7,22 +7,24 @@
   <link href="bundle/index.css" rel="stylesheet">
 </head>
 
-<body class="font-mono text-center w-screen h-screen p-4 grid grid-cols-4 gap-2" style="grid-template-rows: min-content minmax(0, 1fr);">
-  <h2 class="font-bold">Hathi Trust Library</h2>
-  <p>Source on
-    <a class="text-blue-600 hover:text-blue-700" href="https://github.com/chrisprice/d3fc-webgl-hathi-explorer">GitHub</a>
-  </p>
-  <p>
-    Fill by
-    <span class="whitespace-nowrap text-blue-600 hover:text-blue-700">
-      <button id="language" class="">Language</button>
-      <a class="text-black">|</a>
-      <button id="year" class="text-red-600">Year</button>
-    </span>
-  </p>
-  <p id="loading"><span></span></p>
-
-  <div id="chart" class="col-span-4 text-xs"></div>
+<body class="font-mono text-center w-screen h-screen p-4 flex flex-col gap-2">
+  <div class="flex-none md:flex items-center">
+    <h2 class="font-bold text-lg md:text-base flex-1">Hathi Trust Library</h2>
+    <p class="flex-1 text-xs">Source on
+      <a class="text-blue-600 hover:text-blue-700"
+        href="https://github.com/chrisprice/d3fc-webgl-hathi-explorer">GitHub</a>
+    </p>
+    <p class="flex-1 text-xs">
+      Fill by
+      <span class="whitespace-nowrap text-blue-600 hover:text-blue-700">
+        <button id="language" class="">Language</button>
+        <a class="text-black">|</a>
+        <button id="year" class="text-red-600">Year</button>
+      </span>
+    </p>
+    <p id="loading" class="flex-1 text-xs"><span></span></p>
+  </div>
+  <div id="chart" class="flex-grow text-xs"></div>
 
   <script src="bundle/index.js"></script>
 </body>
